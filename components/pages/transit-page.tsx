@@ -1,109 +1,139 @@
+// components/pages/transit-page.tsx
 "use client"
+
 import { motion } from "framer-motion"
-import { Truck, MapPin, Clock, Package } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { Truck, RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useInventario } from "@/hooks/useInventario"
+import { useTransitData } from "@/hooks/useTransitData"
+import { TransitStatsCards } from "@/components/transit/TransitStatsCards"
+import { TransitTable } from "@/components/transit/TransitTable"
 
 export function TransitPage() {
+  const { inventarioAtivo, loading: inventarioLoading } = useInventario()
+  const { contagens, stats, loading, error, recarregar } = useTransitData(inventarioAtivo?.codigo)
+
+  const handleRefresh = () => {
+    recarregar()
+  }
+
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-3xl font-bold text-gray-100">Trânsito</h1>
-        <p className="text-gray-400 mt-1">Controle de ativos em movimentação</p>
-      </motion.div>
-
+      {/* Header */}
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.2 }}
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center justify-between"
       >
-        <Card className="bg-gray-900 border-gray-700">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-gray-100">
-              <Truck className="h-5 w-5 text-blue-400" />
-              Em Trânsito
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-100 mb-2">12</div>
-            <p className="text-sm text-gray-400">Ativos em movimentação</p>
-          </CardContent>
-        </Card>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-100 flex items-center gap-3">
+            <Truck className="h-8 w-8 text-blue-400" />
+            Trânsito
+          </h1>
+          <p className="text-gray-400 mt-1">
+            Controle de ativos em movimentação entre centros de distribuição
+          </p>
+          {inventarioAtivo && (
+            <p className="text-sm text-blue-400 mt-1">
+              Inventário: {inventarioAtivo.codigo} - {inventarioAtivo.responsavel}
+            </p>
+          )}
+        </div>
 
-        <Card className="bg-gray-900 border-gray-700">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-gray-100">
-              <MapPin className="h-5 w-5 text-green-400" />
-              Entregues
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-100 mb-2">45</div>
-            <p className="text-sm text-gray-400">Entregas concluídas hoje</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gray-900 border-gray-700">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-gray-100">
-              <Clock className="h-5 w-5 text-yellow-400" />
-              Pendentes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-100 mb-2">8</div>
-            <p className="text-sm text-gray-400">Aguardando coleta</p>
-          </CardContent>
-        </Card>
+        <Button 
+          onClick={handleRefresh}
+          disabled={loading || inventarioLoading}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </Button>
       </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-        <Card className="bg-gray-900 border-gray-700">
-          <CardHeader>
-            <CardTitle className="text-gray-100">Movimentações Recentes</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {[
-              { id: "HB623-001", origin: "CD Principal", destination: "Loja Centro", status: "em-transito" },
-              { id: "CAIXABAG-045", origin: "Loja Norte", destination: "CD Secundário", status: "entregue" },
-              { id: "HNT-G-023", origin: "CD Principal", destination: "Loja Sul", status: "pendente" },
-            ].map((item, index) => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 * index }}
-                className="flex items-center justify-between p-4 bg-gray-800 rounded-lg border border-gray-700"
-              >
-                <div className="flex items-center space-x-3">
-                  <Package className="h-5 w-5 text-blue-400" />
-                  <div>
-                    <p className="font-medium text-gray-100">{item.id}</p>
-                    <p className="text-sm text-gray-400">
-                      {item.origin} → {item.destination}
-                    </p>
+      {/* Error State */}
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-900/50 border border-red-700 rounded-lg p-4"
+        >
+          <p className="text-red-300">{error}</p>
+        </motion.div>
+      )}
+
+      {/* No Active Inventory */}
+      {!inventarioLoading && !inventarioAtivo && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-yellow-900/50 border border-yellow-700 rounded-lg p-6 text-center"
+        >
+          <p className="text-yellow-300 mb-2">Nenhum inventário ativo encontrado</p>
+          <p className="text-yellow-400 text-sm">
+            É necessário ter um inventário ativo para visualizar os dados de trânsito
+          </p>
+        </motion.div>
+      )}
+
+      {/* Stats Cards */}
+      {inventarioAtivo && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+        >
+          <TransitStatsCards stats={stats} loading={loading} />
+        </motion.div>
+      )}
+
+      {/* Transit Table */}
+      {inventarioAtivo && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <TransitTable contagens={contagens} loading={loading} />
+        </motion.div>
+      )}
+
+      {/* Top Routes */}
+      {inventarioAtivo && stats && stats.rotas.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+        >
+          <div className="bg-gray-900 border border-gray-700 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-100 mb-4">Principais Rotas</h3>
+            <div className="space-y-3">
+              {stats.rotas.slice(0, 5).map((rota, index) => (
+                <div key={`${rota.origem}-${rota.destino}`} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm bg-gray-800 px-2 py-1 rounded">{rota.origem}</span>
+                    <span className="text-gray-500">→</span>
+                    <span className="text-sm bg-gray-800 px-2 py-1 rounded">{rota.destino}</span>
                   </div>
+                  <span className="font-semibold text-gray-100">{rota.quantidade}</span>
                 </div>
-                <Badge
-                  variant={
-                    item.status === "entregue" ? "default" : item.status === "em-transito" ? "secondary" : "outline"
-                  }
-                  className={
-                    item.status === "entregue"
-                      ? "bg-green-900 text-green-300 border-green-700"
-                      : item.status === "em-transito"
-                        ? "bg-blue-900 text-blue-300 border-blue-700"
-                        : "bg-yellow-900 text-yellow-300 border-yellow-700"
-                  }
-                >
-                  {item.status === "entregue" ? "Entregue" : item.status === "em-transito" ? "Em Trânsito" : "Pendente"}
-                </Badge>
-              </motion.div>
-            ))}
-          </CardContent>
-        </Card>
-      </motion.div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-gray-900 border border-gray-700 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-100 mb-4">Top Responsáveis</h3>
+            <div className="space-y-3">
+              {stats.topResponsaveis.map((resp, index) => (
+                <div key={resp.responsavel} className="flex items-center justify-between">
+                  <span className="text-gray-300">{resp.responsavel}</span>
+                  <span className="font-semibold text-gray-100">{resp.quantidade}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
     </div>
   )
 }
