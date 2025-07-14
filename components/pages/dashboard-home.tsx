@@ -19,16 +19,20 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useInventario } from "@/hooks/useInventario"
+import { useDashboardStats } from "@/hooks/useDashboardStats"
+import { LojasPendentesModal } from "@/components/dashboard/LojasPendentesModal"
 import { toast } from "sonner"
 
 export function DashboardHome() {
   const [isNewInventoryOpen, setIsNewInventoryOpen] = React.useState(false)
-  const [isPendingStoresOpen, setIsPendingStoresOpen] = React.useState(false)
+  const [isLojasPendentesOpen, setIsLojasPendentesOpen] = React.useState(false)
   const [nomeResponsavel, setNomeResponsavel] = React.useState("")
   const [isCreating, setIsCreating] = React.useState(false)
 
   const { inventarioAtivo, loading, error, criarNovoInventario, finalizarInventarioAtivo } = useInventario()
+  const { stats, loading: loadingStats, error: errorStats } = useDashboardStats(inventarioAtivo?.codigo)
 
   const handleCriarInventario = async () => {
     if (!nomeResponsavel.trim()) {
@@ -72,11 +76,22 @@ export function DashboardHome() {
     }
   }
 
-  const pendingStores = [
-    { id: 1, name: "Loja Centro", location: "São Paulo - SP", priority: "Alta" },
-    { id: 2, name: "Loja Norte", location: "Rio de Janeiro - RJ", priority: "Média" },
-    { id: 3, name: "Loja Sul", location: "Porto Alegre - RS", priority: "Baixa" },
-  ]
+  // Calcular totais de ativos
+  const totalAtivos = React.useMemo(() => {
+    if (!stats?.ativos) return 0
+    return Object.values(stats.ativos).reduce((acc, quantidade) => acc + quantidade, 0)
+  }, [stats])
+
+  // Calcular progresso das contagens
+  const progressoLojas = React.useMemo(() => {
+    if (!stats?.lojas.total) return 0
+    return Math.round((stats.lojas.contadas / stats.lojas.total) * 100)
+  }, [stats])
+
+  const progressoCD = React.useMemo(() => {
+    if (!stats?.areasCD.total) return 0
+    return Math.round((stats.areasCD.contadas / stats.areasCD.total) * 100)
+  }, [stats])
 
   return (
     <div className="p-6 space-y-6 bg-gray-950 min-h-full">
@@ -191,7 +206,7 @@ export function DashboardHome() {
       </motion.div>
 
       {/* Exibir erro se houver */}
-      {error && (
+      {(error || errorStats) && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -199,7 +214,7 @@ export function DashboardHome() {
         >
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-red-400" />
-            <p className="text-red-300 text-sm">{error}</p>
+            <p className="text-red-300 text-sm">{error || errorStats}</p>
           </div>
         </motion.div>
       )}
@@ -213,8 +228,19 @@ export function DashboardHome() {
               <Store className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-100">60</div>
-              <p className="text-xs text-gray-500 mt-1">45 contadas, 15 pendentes</p>
+              {loadingStats ? (
+                <div className="animate-pulse">
+                  <div className="h-8 bg-gray-700 rounded w-16 mb-1"></div>
+                  <div className="h-4 bg-gray-700 rounded w-24"></div>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-gray-100">{stats?.lojas.total || 0}</div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {stats?.lojas.contadas || 0} contadas, {stats?.lojas.pendentes || 0} pendentes
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -226,73 +252,76 @@ export function DashboardHome() {
               <Warehouse className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-100">28</div>
-              <p className="text-xs text-gray-500 mt-1">de 35 áreas totais</p>
+              {loadingStats ? (
+                <div className="animate-pulse">
+                  <div className="h-8 bg-gray-700 rounded w-16 mb-1"></div>
+                  <div className="h-4 bg-gray-700 rounded w-24"></div>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-gray-100">{stats?.areasCD.contadas || 0}</div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    de {stats?.areasCD.total || 0} áreas totais
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}>
-         <Card className="bg-gray-900 border-gray-700 hover:shadow-md transition-shadow">
-           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-             <CardTitle className="text-sm font-medium text-gray-400">Ativos Cadastrados</CardTitle>
-             <Package className="h-4 w-4 text-purple-600" />
-           </CardHeader>
-           <CardContent>
-             <div className="text-2xl font-bold text-gray-100">1,247</div>
-             <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-               <TrendingUp className="h-3 w-3" />
-               +12% vs mês anterior
-             </p>
+          <Card className="bg-gray-900 border-gray-700 hover:shadow-md transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-400">Ativos Contados</CardTitle>
+              <Package className="h-4 w-4 text-purple-600" />
+            </CardHeader>
+            <CardContent>
+              {loadingStats ? (
+                <div className="animate-pulse">
+                  <div className="h-8 bg-gray-700 rounded w-16 mb-1"></div>
+                  <div className="h-4 bg-gray-700 rounded w-24"></div>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-gray-100">{totalAtivos.toLocaleString()}</div>
+                  {stats?.ativos && Object.keys(stats.ativos).length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {Object.entries(stats.ativos).map(([ativo, quantidade]) => (
+                        <div key={ativo} className="flex justify-between text-xs">
+                          <span className="text-gray-400">{ativo}:</span>
+                          <span className="text-gray-300">{quantidade}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
+          <Card 
+            className="bg-gray-900 border-gray-700 hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => setIsLojasPendentesOpen(true)}
+          >
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-400">Lojas Pendentes</CardTitle>
+              <AlertCircle className="h-4 w-4 text-orange-600" />
+            </CardHeader>
+            <CardContent>
+              {loadingStats ? (
+                <div className="animate-pulse">
+                  <div className="h-4 bg-gray-700 rounded w-24"></div>
+               </div>
+             ) : (
+               <>
+                 <div className="text-2xl font-bold text-gray-100">{stats?.lojas.pendentes || 0}</div>
+                 <p className="text-xs text-orange-600 mt-1">Clique para ver detalhes</p>
+               </>
+             )}
            </CardContent>
          </Card>
-       </motion.div>
-
-       <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
-         <Dialog open={isPendingStoresOpen} onOpenChange={setIsPendingStoresOpen}>
-           <DialogTrigger asChild>
-             <Card className="bg-gray-900 border-gray-700 hover:shadow-md transition-shadow cursor-pointer">
-               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                 <CardTitle className="text-sm font-medium text-gray-400">Lojas Pendentes</CardTitle>
-                 <AlertCircle className="h-4 w-4 text-orange-600" />
-               </CardHeader>
-               <CardContent>
-                 <div className="text-2xl font-bold text-gray-100">15</div>
-                 <p className="text-xs text-orange-600 mt-1">Clique para ver detalhes</p>
-               </CardContent>
-             </Card>
-           </DialogTrigger>
-           <DialogContent className="bg-gray-900 border-gray-700 max-w-2xl">
-             <DialogHeader>
-               <DialogTitle className="text-gray-100">Lojas Pendentes</DialogTitle>
-               <DialogDescription className="text-gray-400">Lista de lojas que ainda precisam ser contadas</DialogDescription>
-             </DialogHeader>
-             <div className="space-y-3">
-               {pendingStores.map((store) => (
-                 <div key={store.id} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-gray-700">
-                   <div>
-                     <p className="font-medium text-gray-100">{store.name}</p>
-                     <p className="text-sm text-gray-400">{store.location}</p>
-                   </div>
-                   <Badge
-                     variant={
-                       store.priority === "Alta" ? "destructive" : store.priority === "Média" ? "default" : "secondary"
-                     }
-                     className={
-                       store.priority === "Alta"
-                         ? "bg-red-900 text-red-300 border-red-700"
-                         : store.priority === "Média"
-                           ? "bg-yellow-900 text-yellow-300 border-yellow-700"
-                           : "bg-gray-700 text-gray-300"
-                     }
-                   >
-                     {store.priority}
-                   </Badge>
-                 </div>
-               ))}
-             </div>
-           </DialogContent>
-         </Dialog>
        </motion.div>
      </div>
 
@@ -302,23 +331,43 @@ export function DashboardHome() {
          <Card className="bg-gray-900 border-gray-700">
            <CardHeader>
              <CardTitle className="text-gray-100">Progresso das Contagens</CardTitle>
-             <CardDescription className="text-gray-400">Status atual das lojas</CardDescription>
+             <CardDescription className="text-gray-400">Status atual das contagens</CardDescription>
            </CardHeader>
            <CardContent className="space-y-4">
-             <div className="space-y-2">
-               <div className="flex justify-between text-sm">
-                 <span className="text-gray-300">Contadas</span>
-                 <span className="text-gray-400">45/60</span>
+             {loadingStats ? (
+               <div className="space-y-4">
+                 {[1, 2].map((i) => (
+                   <div key={i} className="animate-pulse">
+                     <div className="flex justify-between mb-2">
+                       <div className="h-4 bg-gray-700 rounded w-20"></div>
+                       <div className="h-4 bg-gray-700 rounded w-12"></div>
+                     </div>
+                     <div className="h-2 bg-gray-700 rounded"></div>
+                   </div>
+                 ))}
                </div>
-               <Progress value={75} className="h-2" />
-             </div>
-             <div className="space-y-2">
-               <div className="flex justify-between text-sm">
-                 <span className="text-gray-300">Pendentes</span>
-                 <span className="text-gray-400">15/60</span>
-               </div>
-               <Progress value={25} className="h-2" />
-             </div>
+             ) : (
+               <>
+                 <div className="space-y-2">
+                   <div className="flex justify-between text-sm">
+                     <span className="text-gray-300">Lojas Contadas</span>
+                     <span className="text-gray-400">
+                       {stats?.lojas.contadas || 0}/{stats?.lojas.total || 0}
+                     </span>
+                   </div>
+                   <Progress value={progressoLojas} className="h-2" />
+                 </div>
+                 <div className="space-y-2">
+                   <div className="flex justify-between text-sm">
+                     <span className="text-gray-300">Áreas CD Contadas</span>
+                     <span className="text-gray-400">
+                       {stats?.areasCD.contadas || 0}/{stats?.areasCD.total || 0}
+                     </span>
+                   </div>
+                   <Progress value={progressoCD} className="h-2" />
+                 </div>
+               </>
+             )}
            </CardContent>
          </Card>
        </motion.div>
@@ -346,31 +395,55 @@ export function DashboardHome() {
                  </div>
                </div>
              )}
-             <div className="flex items-center space-x-3">
-               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-               <div className="flex-1">
-                 <p className="text-sm text-gray-100">Loja Centro - Contagem finalizada</p>
-                 <p className="text-xs text-gray-500">há 2 horas</p>
-               </div>
-             </div>
+             
+             {/* Placeholder para outras atividades */}
              <div className="flex items-center space-x-3">
                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                <div className="flex-1">
-                 <p className="text-sm text-gray-100">Novo ativo HB 623 cadastrado</p>
-                 <p className="text-xs text-gray-500">há 4 horas</p>
+                 <p className="text-sm text-gray-100">Sistema de logs em construção</p>
+                 <p className="text-xs text-gray-500">Atividades detalhadas serão exibidas em breve</p>
                </div>
              </div>
-             <div className="flex items-center space-x-3">
-               <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-               <div className="flex-1">
-                 <p className="text-sm text-gray-100">Área CD-A em contagem</p>
-                 <p className="text-xs text-gray-500">há 6 horas</p>
+             
+             {stats && stats.lojas.contadas > 0 && (
+               <div className="flex items-center space-x-3">
+                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                 <div className="flex-1">
+                   <p className="text-sm text-gray-100">
+                     {stats.lojas.contadas} lojas já foram contadas
+                   </p>
+                   <p className="text-xs text-gray-500">
+                     Progresso: {progressoLojas}% das lojas concluídas
+                   </p>
+                 </div>
                </div>
-             </div>
+             )}
+             
+             {stats && stats.areasCD.contadas > 0 && (
+               <div className="flex items-center space-x-3">
+                 <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                 <div className="flex-1">
+                   <p className="text-sm text-gray-100">
+                     {stats.areasCD.contadas} áreas do CD contadas
+                   </p>
+                   <p className="text-xs text-gray-500">
+                     {stats.areasCD.pendentes} áreas ainda pendentes
+                   </p>
+                 </div>
+               </div>
+             )}
            </CardContent>
          </Card>
        </motion.div>
      </div>
+
+     {/* Modal de Lojas Pendentes */}
+     <LojasPendentesModal
+       open={isLojasPendentesOpen}
+       onOpenChange={setIsLojasPendentesOpen}
+       lojasPendentes={stats?.lojasPendentes || []}
+       totalPendentes={stats?.lojas.pendentes || 0}
+     />
    </div>
  )
 }
