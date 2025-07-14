@@ -47,7 +47,6 @@ const menuItems = [
   { id: "counts", title: "Contagens", icon: Calculator, component: CountsPage },
   { id: "transit", title: "Trânsito", icon: Truck, component: TransitPage },
   { id: "suppliers", title: "Fornecedores", icon: Users, component: SuppliersPage },
-  { id: "count-control", title: "Controle", icon: ClipboardCheck, component: CountControlPage },
   { id: "reports", title: "Relatórios", icon: FileText, component: ReportsPage },
   { id: "comparatives", title: "Comparativos", icon: BarChart3, component: ComparativesPage },
   { id: "configurations", title: "Configurações", icon: Settings, component: ConfigurationsPage },
