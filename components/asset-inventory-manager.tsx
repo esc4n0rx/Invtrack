@@ -32,13 +32,11 @@ import { InventoryPage } from "@/components/pages/inventory-page"
 import { CountsPage } from "@/components/pages/counts-page"
 import { TransitPage } from "@/components/pages/transit-page"
 import { SuppliersPage } from "@/components/pages/suppliers-page"
-import { CountControlPage } from "@/components/pages/count-control-page"
 import { ReportsPage } from "@/components/pages/reports-page"
 import { ComparativesPage } from "@/components/pages/comparatives-page"
 import { ConfigurationsPage } from "@/components/pages/configurations-page"
 import { SystemAdjustmentsPage } from "@/components/pages/system-adjustments-page"
 import { IntegratorPage } from "@/components/pages/integrator-page"
-import { UsersPage } from "@/components/pages/users-page"
 import { AboutPage } from "@/components/pages/about-page"
 
 const menuItems = [
@@ -52,14 +50,39 @@ const menuItems = [
   { id: "configurations", title: "Configurações", icon: Settings, component: ConfigurationsPage },
   { id: "system-adjustments", title: "Ajustes", icon: Wrench, component: SystemAdjustmentsPage },
   { id: "integrator", title: "Integrador", icon: Zap, component: IntegratorPage },
-  { id: "users", title: "Usuários", icon: User, component: UsersPage },
   { id: "about", title: "Sobre", icon: Info, component: AboutPage },
 ]
 
 export function AssetInventoryManager() {
   const [activeSection, setActiveSection] = React.useState("home")
+  const [search, setSearch] = React.useState("")
+  const [searchResults, setSearchResults] = React.useState(menuItems)
+  const inputRef = React.useRef<HTMLInputElement>(null)
+
+  React.useEffect(() => {
+    if (!search) {
+      setSearchResults(menuItems)
+      return
+    }
+    const lower = search.toLowerCase()
+    setSearchResults(
+      menuItems.filter(
+        (item) =>
+          item.title.toLowerCase().includes(lower) ||
+          item.id.toLowerCase().includes(lower)
+      )
+    )
+  }, [search])
 
   const ActiveComponent = menuItems.find((item) => item.id === activeSection)?.component || DashboardHome
+
+  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && searchResults.length > 0) {
+      setActiveSection(searchResults[0].id)
+      setSearch("")
+      inputRef.current?.blur()
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-950">
@@ -68,10 +91,10 @@ export function AssetInventoryManager() {
         <div className="flex items-center justify-between px-4 py-2">
           {/* Logo e Título */}
           <div className="flex items-center gap-3">
-            <div className="bg-white text-blue-600 px-3 py-1 rounded font-bold text-lg">AM</div>
+            <div className="bg-white text-blue-600 px-3 py-1 rounded font-bold text-lg">HB</div>
             <div>
-              <h1 className="text-lg font-semibold">Asset Manager</h1>
-              <p className="text-xs text-blue-100">Inventário v2.0</p>
+              <h1 className="text-lg font-semibold">HB Inventory</h1>
+              <p className="text-xs text-blue-100">Ambiente de Prdução</p>
             </div>
           </div>
 
@@ -80,9 +103,32 @@ export function AssetInventoryManager() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
+                ref={inputRef}
                 placeholder="Buscar..."
                 className="pl-10 w-64 bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-400"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                autoComplete="off"
               />
+              {search && searchResults.length > 0 && (
+                <div className="absolute left-0 mt-1 w-64 bg-white rounded shadow-lg z-50 max-h-60 overflow-auto">
+                  {searchResults.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-blue-100 text-gray-900"
+                      onClick={() => {
+                        setActiveSection(item.id)
+                        setSearch("")
+                        inputRef.current?.blur()
+                      }}
+                    >
+                      <item.icon className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm">{item.title}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
