@@ -1,42 +1,112 @@
+// components/pages/counts-page.tsx
 "use client"
+
+import * as React from "react"
 import { motion } from "framer-motion"
-import { Calculator, Clock, CheckCircle, AlertCircle } from "lucide-react"
+import { Calculator, AlertCircle, Package, TrendingUp } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ContagemsTable } from "@/components/contagens/ContagemsTable"
+import { NovaContagemModal } from "@/components/contagens/NovaContagemModal"
+import { EditarContagemModal } from "@/components/contagens/EditarContagemModal"
+import { useInventario } from "@/hooks/useInventario"
+import { useContagens } from "@/hooks/useContagens"
+import { Contagem } from "@/types/contagem"
 
 export function CountsPage() {
-  const counts = [
-    { id: 1, location: "Loja Centro", status: "completed", items: 245, date: "2024-01-15", time: "14:30" },
-    { id: 2, location: "CD Área A", status: "in-progress", items: 89, date: "2024-01-15", time: "16:45" },
-    { id: 3, location: "Loja Norte", status: "pending", items: 0, date: "2024-01-16", time: "09:00" },
-    { id: 4, location: "CD Área B", status: "completed", items: 156, date: "2024-01-14", time: "11:20" },
-  ]
+  const [isNovaContagemOpen, setIsNovaContagemOpen] = React.useState(false)
+  const [isEditarContagemOpen, setIsEditarContagemOpen] = React.useState(false)
+  const [contagemSelecionada, setContagemSelecionada] = React.useState<Contagem | null>(null)
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "completed":
-        return <CheckCircle className="h-4 w-4 text-green-400" />
-      case "in-progress":
-        return <Clock className="h-4 w-4 text-yellow-400" />
-      case "pending":
-        return <AlertCircle className="h-4 w-4 text-red-400" />
-      default:
-        return <Calculator className="h-4 w-4 text-gray-400" />
-    }
+  const { inventarioAtivo, loading: loadingInventario, error: errorInventario } = useInventario()
+  const { 
+    contagens, 
+    loading: loadingContagens, 
+    error: errorContagens, 
+    adicionarContagem, 
+    atualizarContagem, 
+    removerContagem 
+  } = useContagens(inventarioAtivo?.codigo)
+
+  const handleEditarContagem = (contagem: Contagem) => {
+    setContagemSelecionada(contagem)
+    setIsEditarContagemOpen(true)
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "completed":
-        return <Badge className="bg-green-900 text-green-300 border-green-700">Concluída</Badge>
-      case "in-progress":
-        return <Badge className="bg-yellow-900 text-yellow-300 border-yellow-700">Em andamento</Badge>
-      case "pending":
-        return <Badge className="bg-red-900 text-red-300 border-red-700">Pendente</Badge>
-      default:
-        return <Badge variant="secondary">Desconhecido</Badge>
+  const handleCloseEditarModal = () => {
+    setIsEditarContagemOpen(false)
+    setContagemSelecionada(null)
+  }
+
+  // Estatísticas das contagens
+  const estatisticas = React.useMemo(() => {
+    const totalContagens = contagens.length
+    const contagensPorTipo = contagens.reduce((acc, contagem) => {
+      acc[contagem.tipo] = (acc[contagem.tipo] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+    
+    const quantidadeTotal = contagens.reduce((acc, contagem) => acc + contagem.quantidade, 0)
+    
+    return {
+      totalContagens,
+      contagensPorTipo,
+      quantidadeTotal,
+      ativosUnicos: new Set(contagens.map(c => c.ativo)).size
     }
+  }, [contagens])
+
+  if (loadingInventario) {
+    return (
+      <div className="container mx-auto px-4 py-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+          <span className="ml-3 text-gray-400">Carregando inventário...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (errorInventario) {
+    return (
+      <div className="container mx-auto px-4 py-6">
+        <Alert className="bg-red-900/20 border-red-700">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-red-300">
+            {errorInventario}
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
+  if (!inventarioAtivo) {
+    return (
+      <div className="container mx-auto px-4 py-6 space-y-6">
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+          <h1 className="text-3xl font-bold text-gray-100">Contagens</h1>
+          <p className="text-gray-400 mt-1">Gerenciamento de contagens do inventário</p>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <Card className="bg-gray-900 border-gray-700">
+            <CardContent className="p-8 text-center">
+              <Calculator className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-100 mb-2">
+                Nenhum Inventário Ativo
+              </h3>
+              <p className="text-gray-400 mb-6">
+                Para começar a registrar contagens, primeiro é necessário criar um inventário ativo.
+              </p>
+              <p className="text-sm text-gray-500">
+                Acesse a página inicial para criar um novo inventário.
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+    )
   }
 
   return (
@@ -48,25 +118,45 @@ export function CountsPage() {
       >
         <div>
           <h1 className="text-3xl font-bold text-gray-100">Contagens</h1>
-          <p className="text-gray-400 mt-1">Histórico e status das contagens realizadas</p>
+          <p className="text-gray-400 mt-1">
+            Inventário: {inventarioAtivo.codigo} - {inventarioAtivo.responsavel}
+          </p>
         </div>
 
-        <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+        <Button 
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+          onClick={() => setIsNovaContagemOpen(true)}
+        >
           <Calculator className="h-4 w-4 mr-2" />
           Nova Contagem
         </Button>
       </motion.div>
 
-      {/* Estatísticas rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Exibir erro das contagens se houver */}
+      {errorContagens && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Alert className="bg-red-900/20 border-red-700">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-red-300">
+              {errorContagens}
+            </AlertDescription>
+          </Alert>
+        </motion.div>
+      )}
+
+      {/* Cards de estatísticas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
           <Card className="bg-gray-900 border-gray-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-400">Concluídas</CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-400" />
+              <CardTitle className="text-sm font-medium text-gray-400">Total de Contagens</CardTitle>
+              <Calculator className="h-4 w-4 text-blue-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-100">2</div>
+              <div className="text-2xl font-bold text-gray-100">{estatisticas.totalContagens}</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -74,11 +164,11 @@ export function CountsPage() {
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}>
           <Card className="bg-gray-900 border-gray-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-400">Em Andamento</CardTitle>
-              <Clock className="h-4 w-4 text-yellow-400" />
+              <CardTitle className="text-sm font-medium text-gray-400">Ativos Diferentes</CardTitle>
+              <Package className="h-4 w-4 text-green-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-100">1</div>
+              <div className="text-2xl font-bold text-gray-100">{estatisticas.ativosUnicos}</div>
             </CardContent>
           </Card>
         </motion.div>
@@ -86,56 +176,61 @@ export function CountsPage() {
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}>
           <Card className="bg-gray-900 border-gray-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-400">Pendentes</CardTitle>
-              <AlertCircle className="h-4 w-4 text-red-400" />
+              <CardTitle className="text-sm font-medium text-gray-400">Quantidade Total</CardTitle>
+              <TrendingUp className="h-4 w-4 text-purple-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-100">1</div>
+              <div className="text-2xl font-bold text-gray-100">{estatisticas.quantidadeTotal.toLocaleString()}</div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
+          <Card className="bg-gray-900 border-gray-700">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-400">Contagens por Tipo</CardTitle>
+              <AlertCircle className="h-4 w-4 text-orange-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1">
+                {Object.entries(estatisticas.contagensPorTipo).map(([tipo, quantidade]) => (
+                  <div key={tipo} className="flex justify-between text-sm">
+                    <span className="text-gray-400 capitalize">{tipo}:</span>
+                    <span className="text-gray-100">{quantidade}</span>
+                  </div>
+                ))}
+                {Object.keys(estatisticas.contagensPorTipo).length === 0 && (
+                  <span className="text-gray-500 text-sm">Nenhuma contagem</span>
+                )}
+              </div>
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
-      {/* Lista de contagens */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="space-y-4">
-        <h2 className="text-xl font-semibold text-gray-100">Histórico de Contagens</h2>
-
-        {counts.map((count, index) => (
-          <motion.div
-            key={count.id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 * index }}
-          >
-            <Card className="bg-gray-900 border-gray-700 hover:border-gray-600 transition-colors">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    {getStatusIcon(count.status)}
-                    <div>
-                      <h3 className="font-semibold text-gray-100">{count.location}</h3>
-                      <p className="text-sm text-gray-400">
-                        {count.date} às {count.time}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-4">
-                    <div className="text-right">
-                      <p className="text-sm text-gray-400">Itens contados</p>
-                      <p className="font-semibold text-gray-100">{count.items}</p>
-                    </div>
-                    {getStatusBadge(count.status)}
-                    <Button variant="ghost" size="sm" className="text-gray-400 hover:text-gray-200">
-                      Ver detalhes
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
+      {/* Tabela de contagens */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+        <ContagemsTable
+          contagens={contagens}
+          loading={loadingContagens}
+          onEdit={handleEditarContagem}
+        />
       </motion.div>
+
+      {/* Modais */}
+      <NovaContagemModal
+        open={isNovaContagemOpen}
+        onOpenChange={setIsNovaContagemOpen}
+        onSubmit={adicionarContagem}
+      />
+
+      <EditarContagemModal
+        open={isEditarContagemOpen}
+        onOpenChange={handleCloseEditarModal}
+        contagem={contagemSelecionada}
+        onEdit={atualizarContagem}
+        onDelete={removerContagem}
+      />
     </div>
   )
 }
