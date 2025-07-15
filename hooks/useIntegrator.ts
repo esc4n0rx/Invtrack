@@ -1,10 +1,11 @@
-// hooks/useIntegrator.ts
+// hooks/useIntegrator.ts (corrigido)
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
 import { IntegratorConfig, IntegratorLog } from '@/types/integrator'
 import { supabaseClient } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { useIntegratorNotifications } from './useIntegratorNotifications'
 
 export function useIntegrator() {
   const [config, setConfig] = useState<IntegratorConfig>({
@@ -12,10 +13,25 @@ export function useIntegrator() {
     interval: 30,
     lastSync: null,
     totalProcessed: 0,
-    errorCount: 0
+    errorCount: 0,
+    lastContagemId: 0,
+    lastTransitoId: 0,
+    syncStrategy: 'sequence'
   })
   const [logs, setLogs] = useState<IntegratorLog[]>([])
   const [loading, setLoading] = useState(false)
+  const [syncProgress, setSyncProgress] = useState<{
+    isRunning: boolean
+    recordsFound: number
+    recordsProcessed: number
+  }>({
+    isRunning: false,
+    recordsFound: 0,
+    recordsProcessed: 0
+  })
+
+  // Usar notificações otimizadas
+  const { notifications, unreadCount, markAsRead } = useIntegratorNotifications()
 
   // Buscar status inicial
   useEffect(() => {
@@ -26,7 +42,7 @@ export function useIntegrator() {
   // Subscription para mudanças no banco em tempo real
   useEffect(() => {
     const subscription = supabaseClient
-      .channel('integrator-config')
+      .channel('integrator-config-optimized')
       .on('postgres_changes', 
         { 
           event: '*', 
@@ -47,7 +63,7 @@ export function useIntegrator() {
   // Subscription para logs em tempo real
   useEffect(() => {
     const subscription = supabaseClient
-      .channel('integrator-logs')
+      .channel('integrator-logs-optimized')
       .on('postgres_changes', 
         { 
           event: 'INSERT', 
@@ -56,6 +72,32 @@ export function useIntegrator() {
         }, 
         () => {
           fetchLogs()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  // Subscription para estatísticas de sincronização
+  useEffect(() => {
+    const subscription = supabaseClient
+      .channel('sync-stats')
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'invtrack_sync_stats' 
+        }, 
+        (payload) => {
+          const { records_found, records_processed } = payload.new
+          setSyncProgress({
+            isRunning: records_processed < records_found,
+            recordsFound: records_found,
+            recordsProcessed: records_processed
+          })
         }
       )
       .subscribe()
@@ -104,7 +146,9 @@ export function useIntegrator() {
       
       if (data.success) {
         setConfig(data.config)
-        toast.success('Integrador iniciado com sucesso!')
+        toast.success('Integrador iniciado com sucesso!', {
+          description: `Sincronização a cada ${interval} segundos usando controle de sequência`
+        })
       } else {
         toast.error(data.error || 'Erro ao iniciar integrador')
       }
@@ -141,6 +185,8 @@ export function useIntegrator() {
 
   const forcSync = useCallback(async () => {
     setLoading(true)
+    setSyncProgress({ isRunning: true, recordsFound: 0, recordsProcessed: 0 })
+    
     try {
       const response = await fetch('/api/integrator/sync', {
         method: 'POST'
@@ -149,7 +195,12 @@ export function useIntegrator() {
       const data = await response.json()
       
       if (data.success) {
-        toast.success(`Sincronização forçada concluída! ${data.processed} itens processados`)
+        const message = `Sincronização forçada concluída! ${data.processed} itens processados`
+        const description = data.duplicates > 0 
+          ? `${data.duplicates} duplicatas encontradas em ${data.duration}ms`
+          : `Concluída em ${data.duration}ms`
+
+        toast.success(message, { description })
         fetchStatus()
         fetchLogs()
       } else {
@@ -159,6 +210,29 @@ export function useIntegrator() {
       toast.error('Erro na sincronização forçada')
     } finally {
       setLoading(false)
+      setSyncProgress({ isRunning: false, recordsFound: 0, recordsProcessed: 0 })
+    }
+  }, [])
+
+  const resetSequenceControl = useCallback(async () => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/integrator/reset-sequence', {
+        method: 'POST'
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success('Controle de sequência resetado com sucesso!')
+        fetchStatus()
+      } else {
+        toast.error(data.error || 'Erro ao resetar controle de sequência')
+      }
+    } catch (error) {
+      toast.error('Erro ao resetar controle de sequência')
+    } finally {
+      setLoading(false)
     }
   }, [])
 
@@ -166,10 +240,15 @@ export function useIntegrator() {
     config,
     logs,
     loading,
+    syncProgress,
+    notifications,
+    unreadCount,
     startIntegrator,
     stopIntegrator,
     forcSync,
+    resetSequenceControl,
     fetchStatus,
-    fetchLogs
+    fetchLogs,
+    markNotificationsAsRead: markAsRead
   }
 }

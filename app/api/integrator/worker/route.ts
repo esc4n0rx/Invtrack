@@ -1,9 +1,11 @@
-// app/api/integrator/worker/route.ts
+// app/api/integrator/worker/route.ts (corrigido)
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { startSyncProcess } from '../sync/route'
+import { startOptimizedSyncProcess } from '../sync/route'
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now()
+  
   try {
     // Verificar se o integrador está ativo
     const { data: config } = await supabaseServer
@@ -32,7 +34,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Executar sincronização
-    const result = await startSyncProcess()
+    const result = await startOptimizedSyncProcess()
+    const duration = Date.now() - startTime
 
     // Atualizar última sincronização e contadores
     await supabaseServer
@@ -45,28 +48,43 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', 1)
 
-    // Disparar evento de atualização para frontends conectados
+    // Atualizar estatísticas com duração real
     if (result.processed > 0) {
       await supabaseServer
-        .from('invtrack_integrator_events')
-        .insert({
-          event_type: 'new_integration',
-          processed_count: result.processed,
-          timestamp: now.toISOString()
-        })
+        .from('invtrack_sync_stats')
+        .update({ sync_duration_ms: duration })
+        .eq('table_name', 'both')
+        .order('sync_timestamp', { ascending: false })
+        .limit(1)
     }
 
     return NextResponse.json({
       success: true,
       processed: result.processed,
-      errors: result.errors.length
+      errors: result.errors.length,
+      duration
     })
 
   } catch (error) {
+    const duration = Date.now() - startTime
     console.error('Erro no worker do integrador:', error)
+    
+    // Log do erro
+    await supabaseServer
+      .from('invtrack_integrator_logs')
+      .insert({
+        type: 'error',
+        message: 'Erro no worker do integrador',
+        details: { 
+          error: error?.message || error,
+          duration 
+        }
+      })
+
     return NextResponse.json({
       success: false,
-      error: 'Erro interno'
+      error: 'Erro interno',
+      duration
     }, { status: 500 })
   }
 }
