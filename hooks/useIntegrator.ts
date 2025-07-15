@@ -1,11 +1,10 @@
-// hooks/useIntegrator.ts (corrigido)
+// hooks/useIntegrator.ts
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
-import { IntegratorConfig, IntegratorLog } from '@/types/integrator'
+import { useState, useEffect } from 'react'
+import { IntegratorConfig, IntegratorLog, WebhookToken, WebhookStats } from '@/types/integrator'
 import { supabaseClient } from '@/lib/supabase'
 import { toast } from 'sonner'
-import { useIntegratorNotifications } from './useIntegratorNotifications'
 
 export function useIntegrator() {
   const [config, setConfig] = useState<IntegratorConfig>({
@@ -13,101 +12,92 @@ export function useIntegrator() {
     interval: 30,
     lastSync: null,
     totalProcessed: 0,
-    errorCount: 0,
-    lastContagemId: 0,
-    lastTransitoId: 0,
-    syncStrategy: 'sequence'
+    errorCount: 0
   })
   const [logs, setLogs] = useState<IntegratorLog[]>([])
-  const [loading, setLoading] = useState(false)
-  const [syncProgress, setSyncProgress] = useState<{
-    isRunning: boolean
-    recordsFound: number
-    recordsProcessed: number
-  }>({
-    isRunning: false,
-    recordsFound: 0,
-    recordsProcessed: 0
+  const [webhookTokens, setWebhookTokens] = useState<WebhookToken[]>([])
+  const [webhookStats, setWebhookStats] = useState<WebhookStats>({
+    totalRequests: 0,
+    successfulRequests: 0,
+    failedRequests: 0,
+    averageProcessingTime: 0,
+    totalContagensCreated: 0
   })
+  const [loading, setLoading] = useState(false)
 
-  // Usar notificações otimizadas
-  const { notifications, unreadCount, markAsRead } = useIntegratorNotifications()
-
-  // Buscar status inicial
+  // Buscar dados iniciais
   useEffect(() => {
-    fetchStatus()
+    fetchConfig()
     fetchLogs()
+    fetchWebhookTokens()
+    fetchWebhookStats()
   }, [])
 
-  // Subscription para mudanças no banco em tempo real
+  // Subscription para mudanças na config
   useEffect(() => {
     const subscription = supabaseClient
-      .channel('integrator-config-optimized')
+      .channel('integrator-config')
       .on('postgres_changes', 
         { 
           event: '*', 
           schema: 'public', 
           table: 'invtrack_integrator_config' 
         }, 
-        () => {
-          fetchStatus()
-        }
+        () => fetchConfig()
       )
       .subscribe()
 
-    return () => {
-      subscription.unsubscribe()
-    }
+    return () => { subscription.unsubscribe(); }
   }, [])
 
-  // Subscription para logs em tempo real
+  // Subscription para novos logs
   useEffect(() => {
     const subscription = supabaseClient
-      .channel('integrator-logs-optimized')
+      .channel('integrator-logs')
       .on('postgres_changes', 
         { 
           event: 'INSERT', 
           schema: 'public', 
           table: 'invtrack_integrator_logs' 
         }, 
-        () => {
-          fetchLogs()
+        (payload) => {
+          const newLog = payload.new as IntegratorLog
+          setLogs(prev => [newLog, ...prev.slice(0, 99)])
+          
+          // Toast automático para sucessos
+          if (newLog.type === 'success' && newLog.processed_count && newLog.processed_count > 0) {
+            toast.success('Novas contagens recebidas!', {
+              description: `${newLog.processed_count} contagens processadas via webhook`
+            })
+          }
         }
       )
       .subscribe()
 
-    return () => {
-      subscription.unsubscribe()
-    }
+    return () => { subscription.unsubscribe(); }
   }, [])
 
-  // Subscription para estatísticas de sincronização
+  // Subscription para contagens (atualizar dashboard)
   useEffect(() => {
     const subscription = supabaseClient
-      .channel('sync-stats')
+      .channel('contagens-updates')
       .on('postgres_changes', 
         { 
           event: 'INSERT', 
           schema: 'public', 
-          table: 'invtrack_sync_stats' 
+          table: 'invtrack_contagens' 
         }, 
-        (payload) => {
-          const { records_found, records_processed } = payload.new
-          setSyncProgress({
-            isRunning: records_processed < records_found,
-            recordsFound: records_found,
-            recordsProcessed: records_processed
-          })
+        () => {
+          // Disparar evento customizado para atualizar dashboard
+          window.dispatchEvent(new CustomEvent('contagens-updated'))
         }
       )
       .subscribe()
 
-    return () => {
-      subscription.unsubscribe()
-    }
+    return () => { subscription.unsubscribe(); }
   }, [])
 
-  const fetchStatus = async () => {
+  const fetchConfig = async () => {
     try {
       const response = await fetch('/api/integrator/status')
       const data = await response.json()
@@ -116,13 +106,13 @@ export function useIntegrator() {
         setConfig(data.config)
       }
     } catch (error) {
-      console.error('Erro ao buscar status:', error)
+      console.error('Erro ao buscar config:', error)
     }
   }
 
   const fetchLogs = async () => {
     try {
-      const response = await fetch('/api/integrator/logs')
+      const response = await fetch('/api/integrator/logs?limit=100')
       const data = await response.json()
       
       if (data.success) {
@@ -133,122 +123,118 @@ export function useIntegrator() {
     }
   }
 
-  const startIntegrator = async (interval: number) => {
+  const fetchWebhookTokens = async () => {
+    try {
+      const response = await fetch('/api/integrator/tokens')
+      const data = await response.json()
+      
+      if (data.success) {
+        setWebhookTokens(data.tokens)
+      }
+    } catch (error) {
+      console.error('Erro ao buscar tokens:', error)
+    }
+  }
+
+  const fetchWebhookStats = async () => {
+    try {
+      const response = await fetch('/api/integrator/stats')
+      const data = await response.json()
+      
+      if (data.success) {
+        setWebhookStats(data.stats)
+      }
+    } catch (error) {
+      console.error('Erro ao buscar estatísticas:', error)
+    }
+  }
+
+  const toggleIntegrator = async () => {
     setLoading(true)
     try {
+      const action = config.isActive ? 'stop' : 'start'
       const response = await fetch('/api/integrator/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start', interval })
+        body: JSON.stringify({ action })
       })
       
       const data = await response.json()
       
       if (data.success) {
         setConfig(data.config)
-        toast.success('Integrador iniciado com sucesso!', {
-          description: `Sincronização a cada ${interval} segundos usando controle de sequência`
-        })
+        toast.success(
+          config.isActive ? 'Integrador desativado!' : 'Integrador ativado!',
+          {
+            description: config.isActive 
+              ? 'API webhook bloqueada para receber contagens'
+              : 'API webhook liberada para receber contagens'
+          }
+        )
       } else {
-        toast.error(data.error || 'Erro ao iniciar integrador')
+        toast.error(data.error || 'Erro ao alterar status do integrador')
       }
     } catch (error) {
-      toast.error('Erro ao iniciar integrador')
+      toast.error('Erro ao alterar status do integrador')
     } finally {
       setLoading(false)
     }
   }
 
-  const stopIntegrator = async () => {
+  const generateNewToken = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/integrator/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'stop' })
-      })
-      
-      const data = await response.json()
-      
-      if (data.success) {
-        setConfig(data.config)
-        toast.success('Integrador parado com sucesso!')
-      } else {
-        toast.error(data.error || 'Erro ao parar integrador')
-      }
-    } catch (error) {
-      toast.error('Erro ao parar integrador')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const forcSync = useCallback(async () => {
-    setLoading(true)
-    setSyncProgress({ isRunning: true, recordsFound: 0, recordsProcessed: 0 })
-    
-    try {
-      const response = await fetch('/api/integrator/sync', {
+      const response = await fetch('/api/integrator/tokens', {
         method: 'POST'
       })
       
       const data = await response.json()
       
       if (data.success) {
-        const message = `Sincronização forçada concluída! ${data.processed} itens processados`
-        const description = data.duplicates > 0 
-          ? `${data.duplicates} duplicatas encontradas em ${data.duration}ms`
-          : `Concluída em ${data.duration}ms`
-
-        toast.success(message, { description })
-        fetchStatus()
-        fetchLogs()
+        await fetchWebhookTokens()
+        toast.success('Novo token gerado com sucesso!')
       } else {
-        toast.error(data.error || 'Erro na sincronização')
+        toast.error(data.error || 'Erro ao gerar token')
       }
     } catch (error) {
-      toast.error('Erro na sincronização forçada')
+      toast.error('Erro ao gerar token')
     } finally {
       setLoading(false)
-      setSyncProgress({ isRunning: false, recordsFound: 0, recordsProcessed: 0 })
     }
-  }, [])
+  }
 
-  const resetSequenceControl = useCallback(async () => {
+  const revokeToken = async (tokenId: string) => {
     setLoading(true)
     try {
-      const response = await fetch('/api/integrator/reset-sequence', {
-        method: 'POST'
+      const response = await fetch(`/api/integrator/tokens/${tokenId}`, {
+        method: 'DELETE'
       })
       
       const data = await response.json()
       
       if (data.success) {
-        toast.success('Controle de sequência resetado com sucesso!')
-        fetchStatus()
+        await fetchWebhookTokens()
+        toast.success('Token revogado com sucesso!')
       } else {
-        toast.error(data.error || 'Erro ao resetar controle de sequência')
+        toast.error(data.error || 'Erro ao revogar token')
       }
     } catch (error) {
-      toast.error('Erro ao resetar controle de sequência')
+      toast.error('Erro ao revogar token')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }
 
   return {
     config,
     logs,
+    webhookTokens,
+    webhookStats,
     loading,
-    syncProgress,
-    notifications,
-    unreadCount,
-    startIntegrator,
-    stopIntegrator,
-    forcSync,
-    resetSequenceControl,
-    fetchStatus,
+    toggleIntegrator,
+    generateNewToken,
+    revokeToken,
     fetchLogs,
-    markNotificationsAsRead: markAsRead
+    fetchWebhookStats
   }
 }

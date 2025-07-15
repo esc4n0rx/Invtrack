@@ -1,13 +1,10 @@
-// types/integrator.ts (corrigido)
+// types/integrator.ts
 export interface IntegratorConfig {
     isActive: boolean
-    interval: number // em segundos (5, 10, 30, 60)
+    interval: number // mantido para compatibilidade, mas não usado
     lastSync: Date | null
     totalProcessed: number
     errorCount: number
-    lastContagemId?: number // Controle de sequência para contagens
-    lastTransitoId?: number // Controle de sequência para trânsito
-    syncStrategy?: 'timestamp' | 'sequence' // Estratégia de sincronização
   }
   
   export interface IntegratorLog {
@@ -19,47 +16,31 @@ export interface IntegratorConfig {
     processed_count?: number
   }
   
-  export interface ExternalContagem {
-    id: number // ID para controle de sequência
-    email: string
-    loja_nome: string
-    ativo_nome: string
-    quantidade: number
-    created_at: string
-  }
-  
-  export interface ExternalContagemTransito {
-    id: number // ID para controle de sequência
-    email: string
-    loja_nome: string // CD SP ou CD ES
-    ativo_nome: string
-    quantidade: number
-    created_at: string
-  }
-  
-  export interface ProcessedResult {
-    success: boolean
-    processed: number
-    errors: string[]
-    duplicates: number
-    lastProcessedId?: number // Último ID processado
-  }
-  
-  export interface SyncStats {
+  export interface WebhookToken {
     id: string
-    sync_timestamp: Date
-    records_found: number
-    records_processed: number
-    records_failed: number
-    sync_duration_ms: number
-    table_name: string
-    last_processed_id: number
-    details?: any
-   }
-   
-   export interface NotificationConfig {
-    enableToasts: boolean
-    enableSounds: boolean
-    showDuplicateWarnings: boolean
-    notificationDuration: number
-   }
+    token: string
+    is_active: boolean
+    created_at: string
+    last_used: string | null
+    requests_count: number
+  }
+  
+  export interface WebhookLog {
+    id: string
+    token_used: string
+    request_ip: string
+    request_data: any
+    response_status: number
+    processing_time_ms: number
+    contagens_created: number
+    errors: string[] | null
+    created_at: string
+  }
+  
+  export interface WebhookStats {
+    totalRequests: number
+    successfulRequests: number
+    failedRequests: number
+    averageProcessingTime: number
+    totalContagensCreated: number
+  }
