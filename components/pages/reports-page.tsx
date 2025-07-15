@@ -82,18 +82,16 @@ export function ReportsPage() {
   }, [relatorios])
 
   const handleCriarRelatorio = async (dados: any) => {
-    const sucesso = await criarNovoRelatorio(dados)
-    if (sucesso) {
-      // Aguardar um momento e tentar processar automaticamente
+    const relatorioCriado = await criarNovoRelatorio(dados)
+    if (relatorioCriado) {
       setTimeout(async () => {
         await recarregar()
-        const ultimoRelatorio = relatorios[0]
-        if (ultimoRelatorio && ultimoRelatorio.status !== 'concluido') {
-          await processarRelatorio(ultimoRelatorio.id)
+        if (relatorioCriado.status !== 'concluido') {
+          await processarRelatorio(relatorioCriado.id)
         }
       }, 1000)
     }
-    return sucesso
+    return !!relatorioCriado
   }
 
   const handleProcessar = async (relatorioId: string) => {

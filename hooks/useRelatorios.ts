@@ -50,21 +50,22 @@ export function useRelatorios(codigoInventario?: string) {
     }
   }
 
-  const criarNovoRelatorio = async (dados: CreateRelatorioRequest): Promise<boolean> => {
+  const criarNovoRelatorio = async (dados: CreateRelatorioRequest): Promise<Relatorio | null> => {
     try {
       setError(null)
       const response = await criarRelatorio(dados)
       
-      if (response.success) {
+      if (response.success && response.data) {
+        const relatorio = Array.isArray(response.data) ? response.data[0] : response.data;
         await carregarRelatorios() // Recarregar lista
-        return true
+        return relatorio // retorna o relatório criado
       } else {
         setError(response.error || 'Erro ao criar relatório')
-        return false
+        return null
       }
     } catch (err) {
       setError('Erro de conexão ao criar relatório')
-      return false
+      return null
     }
   }
 
