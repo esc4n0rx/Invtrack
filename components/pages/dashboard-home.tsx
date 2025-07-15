@@ -20,9 +20,11 @@ import {
 } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useIntegrator} from "@/hooks/useIntegrator"
 import { useInventario } from "@/hooks/useInventario"
 import { useDashboardStats } from "@/hooks/useDashboardStats"
 import { LojasPendentesModal } from "@/components/dashboard/LojasPendentesModal"
+
 import { toast } from "sonner"
 
 export function DashboardHome() {
@@ -30,9 +32,15 @@ export function DashboardHome() {
   const [isLojasPendentesOpen, setIsLojasPendentesOpen] = React.useState(false)
   const [nomeResponsavel, setNomeResponsavel] = React.useState("")
   const [isCreating, setIsCreating] = React.useState(false)
-
+  const { config: integratorConfig } = useIntegrator()
   const { inventarioAtivo, loading, error, criarNovoInventario, finalizarInventarioAtivo } = useInventario()
-  const { stats, loading: loadingStats, error: errorStats } = useDashboardStats(inventarioAtivo?.codigo)
+  const { stats, loading: loadingStats, error: errorStats, recarregar } = useDashboardStats(inventarioAtivo?.codigo)
+
+  React.useEffect(() => {
+    if (integratorConfig.lastSync && recarregar) {
+      recarregar();
+    }
+  }, [integratorConfig.lastSync, recarregar]);
 
   const handleCriarInventario = async () => {
     if (!nomeResponsavel.trim()) {
@@ -218,6 +226,48 @@ export function DashboardHome() {
           </div>
         </motion.div>
       )}
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.6 }}
+      >
+        <Card className="bg-gray-900 border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-gray-100 flex items-center gap-2">
+              <Activity className="h-5 w-5 text-blue-400" />
+              Status da Integração
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-3 h-3 rounded-full ${integratorConfig.isActive ? 'bg-green-400 animate-pulse' : 'bg-gray-600'}`} />
+                <span className="text-gray-300">
+                  {integratorConfig.isActive ? 'Integrador Ativo' : 'Integrador Parado'}
+                </span>
+              </div>
+              {integratorConfig.isActive && (
+                <Badge className="bg-blue-900 text-blue-300 border-blue-700">
+                  Sync a cada {integratorConfig.interval}s
+                </Badge>
+              )}
+            </div>
+            {integratorConfig.lastSync && (
+              <p className="text-sm text-gray-400 mt-2">
+                Última sincronização: {new Date(integratorConfig.lastSync).toLocaleString('pt-BR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit'
+                })}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* Cards de métricas principais */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

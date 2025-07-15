@@ -2,8 +2,10 @@
 "use client"
 
 import * as React from "react"
+import { useEffect } from "react"
+
 import { motion } from "framer-motion"
-import { Calculator, AlertCircle, Package, TrendingUp } from "lucide-react"
+import { Calculator, AlertCircle, Package, TrendingUp, Activity } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -12,13 +14,14 @@ import { NovaContagemModal } from "@/components/contagens/NovaContagemModal"
 import { EditarContagemModal } from "@/components/contagens/EditarContagemModal"
 import { useInventario } from "@/hooks/useInventario"
 import { useContagens } from "@/hooks/useContagens"
+import { useIntegrator} from "@/hooks/useIntegrator"
 import { Contagem } from "@/types/contagem"
 
 export function CountsPage() {
   const [isNovaContagemOpen, setIsNovaContagemOpen] = React.useState(false)
   const [isEditarContagemOpen, setIsEditarContagemOpen] = React.useState(false)
   const [contagemSelecionada, setContagemSelecionada] = React.useState<Contagem | null>(null)
-
+  const { config: integratorConfig } = useIntegrator()
   const { inventarioAtivo, loading: loadingInventario, error: errorInventario } = useInventario()
   const { 
     contagens, 
@@ -26,7 +29,8 @@ export function CountsPage() {
     error: errorContagens, 
     adicionarContagem, 
     atualizarContagem, 
-    removerContagem 
+    removerContagem,
+    recarregar
   } = useContagens(inventarioAtivo?.codigo)
 
   const handleEditarContagem = (contagem: Contagem) => {
@@ -38,6 +42,13 @@ export function CountsPage() {
     setIsEditarContagemOpen(false)
     setContagemSelecionada(null)
   }
+
+
+  useEffect(() => {
+    if (integratorConfig.lastSync && recarregar) {
+      recarregar();
+    }
+  }, [integratorConfig.lastSync, recarregar])
 
   // Estatísticas das contagens
   const estatisticas = React.useMemo(() => {
@@ -131,6 +142,16 @@ export function CountsPage() {
           Nova Contagem
         </Button>
       </motion.div>
+
+
+      {integratorConfig.isActive && (
+      <Alert className="bg-blue-900/20 border-blue-700 mb-4">
+        <Activity className="h-4 w-4" />
+        <AlertDescription className="text-blue-300">
+          <strong>Integração Ativa:</strong> Contagens externas sendo importadas automaticamente a cada {integratorConfig.interval} segundos.
+        </AlertDescription>
+      </Alert>
+    )}
 
       {/* Exibir erro das contagens se houver */}
       {errorContagens && (
