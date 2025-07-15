@@ -1,4 +1,3 @@
-// app/api/relatorios/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { CreateRelatorioRequest } from '@/types/relatorio'
@@ -7,7 +6,6 @@ export async function POST(request: NextRequest) {
   try {
     const dados: CreateRelatorioRequest = await request.json()
 
-    // Validação básica
     if (!dados.nome || !dados.tipo || !dados.usuario_criacao) {
       return NextResponse.json({
         success: false,
@@ -15,7 +13,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Buscar inventário ativo
     const { data: inventarioAtivo, error: errorInventario } = await supabaseServer
       .from('invtrack_inventarios')
       .select('codigo')
@@ -29,7 +26,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Criar relatório
     const { data: relatorio, error: errorRelatorio } = await supabaseServer
       .from('invtrack_relatorios')
       .insert({

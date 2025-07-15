@@ -1,4 +1,3 @@
-// app/api/relatorios/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 
@@ -16,7 +15,6 @@ export async function DELETE(
      }, { status: 400 })
    }
 
-   // Verificar se o relatório existe
    const { data: relatorio, error: errorBusca } = await supabaseServer
      .from('invtrack_relatorios')
      .select('id, nome')
@@ -30,7 +28,6 @@ export async function DELETE(
      }, { status: 404 })
    }
 
-   // Excluir relatório
    const { error: errorExclusao } = await supabaseServer
      .from('invtrack_relatorios')
      .delete()

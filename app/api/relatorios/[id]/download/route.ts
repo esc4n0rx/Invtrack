@@ -1,6 +1,7 @@
-// app/api/relatorios/[id]/download/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
+import PDFDocument from 'pdfkit'
+import ExcelJS from 'exceljs'
 
 export async function GET(
   request: NextRequest,
@@ -15,7 +16,6 @@ export async function GET(
       }, { status: 400 })
     }
 
-    // Buscar relatório
     const { data: relatorio, error } = await supabaseServer
       .from('invtrack_relatorios')
       .select('*')
@@ -40,7 +40,6 @@ export async function GET(
       }, { status: 400 })
     }
 
-    // Gerar arquivo baseado no formato
     let conteudo: string | Buffer
     let contentType: string
     let nomeArquivo: string
@@ -59,17 +58,15 @@ export async function GET(
         break
 
       case 'excel':
-        // Implementar geração de Excel se necessário
-        conteudo = JSON.stringify(relatorio.dados, null, 2)
-        contentType = 'application/json'
-        nomeArquivo = `${relatorio.nome}.json`
+        conteudo = await gerarExcel(relatorio.dados, relatorio.tipo)
+        contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        nomeArquivo = `${relatorio.nome}.xlsx`
         break
 
       case 'pdf':
-        // Implementar geração de PDF se necessário
-        conteudo = JSON.stringify(relatorio.dados, null, 2)
-        contentType = 'application/json'
-        nomeArquivo = `${relatorio.nome}.json`
+        conteudo = await gerarPDF(relatorio.dados, relatorio.tipo, relatorio.nome)
+        contentType = 'application/pdf'
+        nomeArquivo = `${relatorio.nome}.pdf`
         break
 
       default:
@@ -78,6 +75,7 @@ export async function GET(
         nomeArquivo = `${relatorio.nome}.json`
     }
 
+    // Se for PDF ou Excel, conteudo é Buffer
     return new NextResponse(conteudo, {
       headers: {
         'Content-Type': contentType,
@@ -95,7 +93,6 @@ export async function GET(
 }
 
 async function gerarCSV(dados: any, tipo: string): Promise<string> {
-  // Implementar conversão para CSV baseado no tipo de relatório
   
   if (tipo === 'inventario_completo' && dados.detalhes_contagens) {
     const headers = ['Tipo', 'Ativo', 'Quantidade', 'Data Contagem', 'Responsável', 'Local', 'Observações']
@@ -154,6 +151,98 @@ async function gerarCSV(dados: any, tipo: string): Promise<string> {
     return linhas.join('\n')
   }
 
-  // Para outros tipos, retornar JSON como fallback
   return JSON.stringify(dados, null, 2)
+}
+
+// Função para gerar Excel (.xlsx)
+async function gerarExcel(dados: any, tipo: string): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('Relatório')
+
+  if (tipo === 'inventario_completo' && dados.detalhes_contagens) {
+    sheet.addRow(['Tipo', 'Ativo', 'Quantidade', 'Data Contagem', 'Responsável', 'Local', 'Observações'])
+    dados.detalhes_contagens.forEach((contagem: any) => {
+      const local = contagem.loja || contagem.setor_cd || contagem.fornecedor || `${contagem.cd_origem || ''} → ${contagem.cd_destino || ''}` || 'N/A'
+      sheet.addRow([
+        contagem.tipo,
+        contagem.ativo,
+        contagem.quantidade,
+        new Date(contagem.data_contagem).toLocaleDateString('pt-BR'),
+        contagem.responsavel,
+        local,
+        contagem.obs || ''
+      ])
+    })
+  } else if (tipo === 'contagens_por_loja' && dados.resumo) {
+    sheet.addRow(['Loja', 'Total Itens', 'Quantidade Total', 'Ativos Distintos'])
+    dados.resumo.forEach((item: any) => {
+      sheet.addRow([
+        item.loja,
+        item.total_itens,
+        item.quantidade_total,
+        item.ativos_distintos
+      ])
+    })
+  } else if (tipo === 'contagens_por_cd' && dados.resumo) {
+    sheet.addRow(['Setor', 'Total Itens', 'Quantidade Total', 'Ativos Distintos'])
+    dados.resumo.forEach((item: any) => {
+      sheet.addRow([
+        item.setor,
+        item.total_itens,
+        item.quantidade_total,
+        item.ativos_distintos
+      ])
+    })
+  } else {
+    // fallback: dump json
+    sheet.addRow(['Dados'])
+    sheet.addRow([JSON.stringify(dados)])
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer()
+  return Buffer.from(buffer)
+}
+
+// Função para gerar PDF
+async function gerarPDF(dados: any, tipo: string, nome: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 30 })
+    const buffers: Buffer[] = []
+
+    doc.on('data', buffers.push.bind(buffers))
+    doc.on('end', () => {
+      resolve(Buffer.concat(buffers))
+    })
+    doc.on('error', reject)
+
+    doc.fontSize(18).text(`Relatório: ${nome}`, { align: 'center' })
+    doc.moveDown()
+
+    if (tipo === 'inventario_completo' && dados.detalhes_contagens) {
+      doc.fontSize(12).text('Tipo | Ativo | Quantidade | Data Contagem | Responsável | Local | Observações')
+      doc.moveDown(0.5)
+      dados.detalhes_contagens.forEach((contagem: any) => {
+        const local = contagem.loja || contagem.setor_cd || contagem.fornecedor || `${contagem.cd_origem || ''} → ${contagem.cd_destino || ''}` || 'N/A'
+        doc.text(`${contagem.tipo} | ${contagem.ativo} | ${contagem.quantidade} | ${new Date(contagem.data_contagem).toLocaleDateString('pt-BR')} | ${contagem.responsavel} | ${local} | ${contagem.obs || ''}`)
+      })
+    } else if (tipo === 'contagens_por_loja' && dados.resumo) {
+      doc.fontSize(12).text('Loja | Total Itens | Quantidade Total | Ativos Distintos')
+      doc.moveDown(0.5)
+      dados.resumo.forEach((item: any) => {
+        doc.text(`${item.loja} | ${item.total_itens} | ${item.quantidade_total} | ${item.ativos_distintos}`)
+      })
+    } else if (tipo === 'contagens_por_cd' && dados.resumo) {
+      doc.fontSize(12).text('Setor | Total Itens | Quantidade Total | Ativos Distintos')
+      doc.moveDown(0.5)
+      dados.resumo.forEach((item: any) => {
+        doc.text(`${item.setor} | ${item.total_itens} | ${item.quantidade_total} | ${item.ativos_distintos}`)
+      })
+    } else {
+      doc.fontSize(12).text('Dados:')
+      doc.moveDown(0.5)
+      doc.text(JSON.stringify(dados, null, 2))
+    }
+
+    doc.end()
+  })
 }

@@ -1,4 +1,3 @@
-// app/api/relatorios/templates/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 
@@ -36,7 +35,6 @@ export async function POST(request: NextRequest) {
   try {
     const dados = await request.json()
 
-    // Validação básica
     if (!dados.nome || !dados.tipo_base || !dados.configuracao) {
       return NextResponse.json({
         success: false,

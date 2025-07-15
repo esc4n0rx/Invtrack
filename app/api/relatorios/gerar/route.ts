@@ -1,4 +1,3 @@
-// app/api/relatorios/gerar/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { DadosInventarioCompleto } from '@/types/relatorio'
@@ -14,7 +13,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Buscar relatório
     const { data: relatorio, error: errorRelatorio } = await supabaseServer
       .from('invtrack_relatorios')
       .select('*')
@@ -37,7 +35,6 @@ export async function POST(request: NextRequest) {
 
     const dataInicio = new Date()
 
-    // Atualizar status para processando
     await supabaseServer
       .from('invtrack_relatorios')
       .update({ 
@@ -47,13 +44,11 @@ export async function POST(request: NextRequest) {
       .eq('id', relatorio_id)
 
     try {
-      // Gerar dados do relatório baseado no tipo
       const dados = await gerarDadosRelatorio(relatorio)
       
       const dataFim = new Date()
       const tempoProcessamento = dataFim.getTime() - dataInicio.getTime()
 
-      // Atualizar relatório com dados gerados
       const { data: relatorioAtualizado, error: errorUpdate } = await supabaseServer
         .from('invtrack_relatorios')
         .update({
@@ -77,7 +72,6 @@ export async function POST(request: NextRequest) {
       })
 
     } catch (error) {
-      // Atualizar status para erro
       await supabaseServer
         .from('invtrack_relatorios')
         .update({ 
@@ -129,20 +123,17 @@ async function gerarDadosRelatorio(relatorio: any): Promise<any> {
 }
 
 async function gerarInventarioCompleto(codigoInventario: string, filtros: any): Promise<DadosInventarioCompleto> {
-  // Buscar dados do inventário
   const { data: inventario } = await supabaseServer
     .from('invtrack_inventarios')
     .select('*')
     .eq('codigo', codigoInventario)
     .single()
 
-  // Buscar todas as contagens
   let queryContagens = supabaseServer
     .from('invtrack_contagens')
     .select('*')
     .eq('codigo_inventario', codigoInventario)
 
-  // Aplicar filtros se existirem
   if (filtros?.tipo_contagem && filtros.tipo_contagem !== 'todos') {
     queryContagens = queryContagens.eq('tipo', filtros.tipo_contagem)
   }
@@ -157,7 +148,6 @@ async function gerarInventarioCompleto(codigoInventario: string, filtros: any): 
 
   const { data: contagens } = await queryContagens.order('data_contagem', { ascending: false })
 
-  // Calcular estatísticas
   const totalContagens = contagens?.length || 0
   const ativosUnicos = new Set(contagens?.map(c => c.ativo) || [])
   const lojasUnicas = new Set(contagens?.filter(c => c.tipo === 'loja' && c.loja).map(c => c.loja) || [])
@@ -203,7 +193,6 @@ async function gerarContagensPorLoja(codigoInventario: string, filtros: any) {
 
   const { data: contagens } = await query.order('loja').order('ativo')
 
-  // Agrupar por loja
   const contagensPorLoja = contagens?.reduce((acc, contagem) => {
     const loja = contagem.loja || 'Não especificada'
     if (!acc[loja]) {
@@ -241,7 +230,6 @@ async function gerarContagensPorCD(codigoInventario: string, filtros: any) {
 
  const { data: contagens } = await query.order('setor_cd').order('ativo')
 
- // Agrupar por setor CD
  const contagensPorSetor = contagens?.reduce((acc, contagem) => {
    const setor = contagem.setor_cd || 'Não especificado'
    if (!acc[setor]) {
@@ -295,13 +283,11 @@ async function gerarAtivosEmTransito(codigoInventario: string, filtros: any) {
 }
 
 async function gerarComparativoContagens(codigoInventario: string, filtros: any) {
- // Buscar contagens internas
  const { data: contagensInternas } = await supabaseServer
    .from('invtrack_contagens')
    .select('*')
    .eq('codigo_inventario', codigoInventario)
 
- // Buscar contagens externas
  const { data: contagensExternas } = await supabaseServer
    .from('invtrack_contagens_externas')
    .select(`
@@ -310,10 +296,9 @@ async function gerarComparativoContagens(codigoInventario: string, filtros: any)
    `)
    .eq('codigo_inventario', codigoInventario)
 
- // Processar comparações
+
  const comparacoes: any[] = []
  
- // Comparar contagens internas vs externas por setor CD
  const setoresCd = new Set([
    ...(contagensInternas?.filter(c => c.tipo === 'cd').map(c => c.setor_cd) || []),
    ...(contagensExternas?.map(c => c.setor_cd) || [])
@@ -325,7 +310,6 @@ async function gerarComparativoContagens(codigoInventario: string, filtros: any)
    const internasSetor = contagensInternas?.filter(c => c.tipo === 'cd' && c.setor_cd === setor) || []
    const externasSetor = contagensExternas?.filter(c => c.setor_cd === setor) || []
 
-   // Agrupar por ativo
    const ativosMapeados = new Map<string, any>()
 
    internasSetor.forEach(c => {
@@ -369,7 +353,6 @@ async function gerarComparativoContagens(codigoInventario: string, filtros: any)
 }
 
 async function gerarRelatorioDivergencias(codigoInventario: string, filtros: any) {
- // Implementar lógica de divergências
  const comparativo = await gerarComparativoContagens(codigoInventario, filtros)
  
  const divergencias = comparativo.comparacoes
