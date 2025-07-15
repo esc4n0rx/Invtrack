@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Contagem, CreateContagemRequest, EditContagemRequest, DeleteContagemRequest } from '@/types/contagem'
 import { buscarContagens, criarContagem, editarContagem, deletarContagem } from '@/lib/api/contagens'
+import { supabaseClient } from '@/lib/supabase'
 
 export function useContagens(codigoInventario?: string) {
   const [contagens, setContagens] = useState<Contagem[]>([])
@@ -32,6 +33,37 @@ export function useContagens(codigoInventario?: string) {
       setLoading(false)
     }
   }
+
+  // Carregar contagens inicial
+  useEffect(() => {
+    carregarContagens()
+  }, [codigoInventario])
+
+  // Subscription para eventos de integração
+  useEffect(() => {
+    if (!codigoInventario) return
+
+    const subscription = supabaseClient
+      .channel('integration-events')
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'invtrack_integrator_events' 
+        }, 
+        (payload) => {
+          if (payload.new.event_type === 'new_integration') {
+            // Só recarrega se realmente houve novas integrações
+            carregarContagens()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [codigoInventario])
 
   const adicionarContagem = async (dados: CreateContagemRequest) => {
     try {
@@ -104,10 +136,6 @@ export function useContagens(codigoInventario?: string) {
       setLoading(false)
     }
   }
-
-  useEffect(() => {
-    carregarContagens()
-  }, [codigoInventario])
 
   return {
     contagens,

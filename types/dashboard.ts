@@ -21,6 +21,7 @@ export interface DashboardStats {
   export interface LojaContagem {
     loja: string
     contada: boolean
+    responsavel:string
   }
   
   export interface AreaCDContagem {

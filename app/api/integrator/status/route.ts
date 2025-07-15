@@ -2,42 +2,48 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 
-// Estado global do integrador (em produção, usar Redis ou banco)
-let integratorState = {
-  isActive: false,
-  interval: 30,
-  lastSync: null as Date | null,
-  totalProcessed: 0,
-  errorCount: 0,
-  intervalId: null as NodeJS.Timeout | null
-}
-
 export async function GET() {
   try {
-    // Buscar configuração do banco se existir
-    const { data: config } = await supabaseServer
+    // Buscar configuração atual do banco
+    const { data: config, error } = await supabaseServer
       .from('invtrack_integrator_config')
       .select('*')
       .single()
 
-    if (config) {
-      integratorState = {
-        ...integratorState,
-        ...config,
-        lastSync: config.last_sync ? new Date(config.last_sync) : null
-      }
+    if (error && error.code !== 'PGRST116') {
+      console.error('Erro ao buscar config:', error)
+      return NextResponse.json({
+        success: false,
+        error: 'Erro ao buscar status do integrador'
+      }, { status: 500 })
     }
 
-    // Remover propriedades não serializáveis
-    const { intervalId, ...safeState } = integratorState
+    // Configuração padrão se não existir
+    const defaultConfig = {
+      isActive: false,
+      interval: 30,
+      lastSync: null,
+      totalProcessed: 0,
+      errorCount: 0
+    }
+
+    const responseConfig = config ? {
+      isActive: config.is_active || false,
+      interval: config.interval_seconds || 30,
+      lastSync: config.last_sync || null,
+      totalProcessed: config.total_processed || 0,
+      errorCount: config.error_count || 0
+    } : defaultConfig
+
     return NextResponse.json({
       success: true,
-      config: safeState
+      config: responseConfig
     })
   } catch (error) {
+    console.error('Erro geral:', error)
     return NextResponse.json({
       success: false,
-      error: 'Erro ao buscar status do integrador'
+      error: 'Erro interno do servidor'
     }, { status: 500 })
   }
 }
@@ -61,53 +67,78 @@ export async function POST(request: NextRequest) {
         }, { status: 400 })
       }
 
-      // Parar integrador anterior se existir
-      if (integratorState.intervalId) {
-        clearInterval(integratorState.intervalId)
+      // Salvar configuração ativa no banco
+      const { error: configError } = await supabaseServer
+        .from('invtrack_integrator_config')
+        .upsert({
+          id: 1,
+          is_active: true,
+          interval_seconds: interval || 30,
+          last_sync: null,
+          total_processed: 0,
+          error_count: 0,
+          updated_at: new Date().toISOString()
+        })
+
+      if (configError) {
+        console.error('Erro ao salvar config:', configError)
+        return NextResponse.json({
+          success: false,
+          error: 'Erro ao salvar configuração'
+        }, { status: 500 })
       }
 
-      // Iniciar novo integrador
-      integratorState.isActive = true
-      integratorState.interval = interval || 30
+      // Criar função que executará a sincronização via Supabase Edge Functions
+      // Aqui usaremos um approach diferente: marcar como ativo e deixar um cron job externo gerenciar
+      await logInfo(`Integrador iniciado com intervalo de ${interval || 30}s`)
 
-      // Configurar intervalo de sincronização
-      // Certifique-se de que startSyncProcess está exportado corretamente em ../sync/route
-      const { startSyncProcess } = await import('../sync/route')
-      integratorState.intervalId = setInterval(async () => {
-        try {
-          await startSyncProcess()
-        } catch (error) {
-          console.error('Erro na sincronização automática:', error)
-          await logError('Erro na sincronização automática', error)
+      return NextResponse.json({
+        success: true,
+        config: {
+          isActive: true,
+          interval: interval || 30,
+          lastSync: null,
+          totalProcessed: 0,
+          errorCount: 0
         }
-      }, integratorState.interval * 1000)
-
-      // Salvar configuração no banco
-      await saveConfig()
-
-      // Log de início
-      await logInfo(`Integrador iniciado com intervalo de ${integratorState.interval}s`)
+      })
 
     } else if (action === 'stop') {
-      // Parar integrador
-      if (integratorState.intervalId) {
-        clearInterval(integratorState.intervalId)
-        integratorState.intervalId = null
+      // Marcar como inativo
+      const { error: configError } = await supabaseServer
+        .from('invtrack_integrator_config')
+        .upsert({
+          id: 1,
+          is_active: false,
+          updated_at: new Date().toISOString()
+        })
+
+      if (configError) {
+        console.error('Erro ao parar integrador:', configError)
+        return NextResponse.json({
+          success: false,
+          error: 'Erro ao parar integrador'
+        }, { status: 500 })
       }
 
-      integratorState.isActive = false
-
-      // Salvar configuração no banco
-      await saveConfig()
-
-      // Log de parada
       await logInfo('Integrador parado')
+
+      return NextResponse.json({
+        success: true,
+        config: {
+          isActive: false,
+          interval: 30,
+          lastSync: null,
+          totalProcessed: 0,
+          errorCount: 0
+        }
+      })
     }
 
     return NextResponse.json({
-      success: true,
-      config: (({ intervalId, ...rest }) => rest)(integratorState)
-    })
+      success: false,
+      error: 'Ação não reconhecida'
+    }, { status: 400 })
 
   } catch (error) {
     console.error('Erro no controle do integrador:', error)
@@ -118,36 +149,16 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function saveConfig() {
-  await supabaseServer
-    .from('invtrack_integrator_config')
-    .upsert({
-      id: 1,
-      is_active: integratorState.isActive,
-      interval_seconds: integratorState.interval,
-      last_sync: integratorState.lastSync?.toISOString(),
-      total_processed: integratorState.totalProcessed,
-      error_count: integratorState.errorCount
-    })
-}
-
 async function logInfo(message: string, details?: any) {
-  await supabaseServer
-    .from('invtrack_integrator_logs')
-    .insert({
-      type: 'info',
-      message,
-      details
-    })
-}
-
-async function logError(message: string, error: any) {
-  integratorState.errorCount++
-  await supabaseServer
-    .from('invtrack_integrator_logs')
-    .insert({
-      type: 'error',
-      message,
-      details: { error: error?.message || error }
-    })
+  try {
+    await supabaseServer
+      .from('invtrack_integrator_logs')
+      .insert({
+        type: 'info',
+        message,
+        details: details || {}
+      })
+  } catch (error) {
+    console.error('Erro ao criar log:', error)
+  }
 }

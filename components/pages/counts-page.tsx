@@ -1,8 +1,6 @@
-// components/pages/counts-page.tsx
 "use client"
 
 import * as React from "react"
-import { useEffect } from "react"
 
 import { motion } from "framer-motion"
 import { Calculator, AlertCircle, Package, TrendingUp, Activity } from "lucide-react"
@@ -14,7 +12,7 @@ import { NovaContagemModal } from "@/components/contagens/NovaContagemModal"
 import { EditarContagemModal } from "@/components/contagens/EditarContagemModal"
 import { useInventario } from "@/hooks/useInventario"
 import { useContagens } from "@/hooks/useContagens"
-import { useIntegrator} from "@/hooks/useIntegrator"
+import { useIntegrator } from "@/hooks/useIntegrator"
 import { Contagem } from "@/types/contagem"
 
 export function CountsPage() {
@@ -43,12 +41,8 @@ export function CountsPage() {
     setContagemSelecionada(null)
   }
 
-
-  useEffect(() => {
-    if (integratorConfig.lastSync && recarregar) {
-      recarregar();
-    }
-  }, [integratorConfig.lastSync, recarregar])
+  // REMOVIDO: useEffect que causava loop infinito
+  // As atualizações agora são gerenciadas via subscription no useContagens
 
   // Estatísticas das contagens
   const estatisticas = React.useMemo(() => {
@@ -143,33 +137,22 @@ export function CountsPage() {
         </Button>
       </motion.div>
 
-
       {integratorConfig.isActive && (
-      <Alert className="bg-blue-900/20 border-blue-700 mb-4">
-        <Activity className="h-4 w-4" />
-        <AlertDescription className="text-blue-300">
-          <strong>Integração Ativa:</strong> Contagens externas sendo importadas automaticamente a cada {integratorConfig.interval} segundos.
-        </AlertDescription>
-      </Alert>
-    )}
-
-      {/* Exibir erro das contagens se houver */}
-      {errorContagens && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <Alert className="bg-red-900/20 border-red-700">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="text-red-300">
-              {errorContagens}
-            </AlertDescription>
-          </Alert>
-        </motion.div>
+        <Alert className="bg-blue-900/20 border-blue-700 mb-4">
+          <Activity className="h-4 w-4" />
+          <AlertDescription className="text-blue-300">
+            <strong>Integração Ativa:</strong> Contagens externas sendo importadas automaticamente a cada {integratorConfig.interval} segundos.
+            {integratorConfig.lastSync && (
+              <span className="block text-sm mt-1">
+                Última sincronização: {new Date(integratorConfig.lastSync).toLocaleString('pt-BR')}
+              </span>
+            )}
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* Cards de estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Estatísticas */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}>
           <Card className="bg-gray-900 border-gray-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -178,6 +161,9 @@ export function CountsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-gray-100">{estatisticas.totalContagens}</div>
+              <p className="text-xs text-gray-500">
+                {estatisticas.ativosUnicos} ativos únicos
+              </p>
             </CardContent>
           </Card>
         </motion.div>
@@ -185,11 +171,14 @@ export function CountsPage() {
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}>
           <Card className="bg-gray-900 border-gray-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-400">Ativos Diferentes</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-400">Quantidade Total</CardTitle>
               <Package className="h-4 w-4 text-green-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-100">{estatisticas.ativosUnicos}</div>
+              <div className="text-2xl font-bold text-gray-100">{estatisticas.quantidadeTotal.toLocaleString('pt-BR')}</div>
+              <p className="text-xs text-gray-500">
+                Itens contados
+              </p>
             </CardContent>
           </Card>
         </motion.div>
@@ -197,11 +186,14 @@ export function CountsPage() {
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}>
           <Card className="bg-gray-900 border-gray-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-400">Quantidade Total</CardTitle>
-              <TrendingUp className="h-4 w-4 text-purple-400" />
+              <CardTitle className="text-sm font-medium text-gray-400">Contagens de Loja</CardTitle>
+              <TrendingUp className="h-4 w-4 text-orange-400" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-gray-100">{estatisticas.quantidadeTotal.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-gray-100">{estatisticas.contagensPorTipo.loja || 0}</div>
+              <p className="text-xs text-gray-500">
+                Lojas contadas
+              </p>
             </CardContent>
           </Card>
         </motion.div>
@@ -209,33 +201,53 @@ export function CountsPage() {
         <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.4 }}>
           <Card className="bg-gray-900 border-gray-700">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-400">Contagens por Tipo</CardTitle>
-              <AlertCircle className="h-4 w-4 text-orange-400" />
+              <CardTitle className="text-sm font-medium text-gray-400">Contagens CD</CardTitle>
+              <Activity className="h-4 w-4 text-purple-400" />
             </CardHeader>
             <CardContent>
-              <div className="space-y-1">
-                {Object.entries(estatisticas.contagensPorTipo).map(([tipo, quantidade]) => (
-                  <div key={tipo} className="flex justify-between text-sm">
-                    <span className="text-gray-400 capitalize">{tipo}:</span>
-                    <span className="text-gray-100">{quantidade}</span>
-                  </div>
-                ))}
-                {Object.keys(estatisticas.contagensPorTipo).length === 0 && (
-                  <span className="text-gray-500 text-sm">Nenhuma contagem</span>
-                )}
-              </div>
+              <div className="text-2xl font-bold text-gray-100">{estatisticas.contagensPorTipo.cd || 0}</div>
+              <p className="text-xs text-gray-500">
+                Áreas CD contadas
+              </p>
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
       {/* Tabela de contagens */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
-        <ContagemsTable
-          contagens={contagens}
-          loading={loadingContagens}
-          onEdit={handleEditarContagem}
-        />
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+      >
+        <Card className="bg-gray-900 border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-gray-100">Lista de Contagens</CardTitle>
+            {errorContagens && (
+              <Alert className="bg-red-900/20 border-red-700 mt-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-red-300">
+                  {errorContagens}
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardHeader>
+          <CardContent>
+            {loadingContagens ? (
+              <div className="flex items-center justify-center h-32">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
+                <span className="ml-3 text-gray-400">Carregando contagens...</span>
+              </div>
+            ) : (
+              <ContagemsTable
+                contagens={contagens}
+                loading={loadingContagens}
+                onEdit={handleEditarContagem}
+                onRemove={removerContagem}
+              />
+            )}
+          </CardContent>
+        </Card>
       </motion.div>
 
       {/* Modais */}
@@ -247,10 +259,10 @@ export function CountsPage() {
 
       <EditarContagemModal
         open={isEditarContagemOpen}
-        onOpenChange={handleCloseEditarModal}
-        contagem={contagemSelecionada}
+        onOpenChange={setIsEditarContagemOpen}
         onEdit={atualizarContagem}
         onDelete={removerContagem}
+        contagem={contagemSelecionada}
       />
     </div>
   )

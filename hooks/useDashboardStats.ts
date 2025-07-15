@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { DashboardStats } from '@/types/dashboard'
 import { buscarEstatisticasDashboard } from '@/lib/api/dashboard'
+import { supabaseClient } from '@/lib/supabase'
 
 export function useDashboardStats(codigoInventario?: string) {
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -33,8 +34,35 @@ export function useDashboardStats(codigoInventario?: string) {
     }
   }
 
+  // Carregar estatísticas inicial
   useEffect(() => {
     carregarEstatisticas()
+  }, [codigoInventario])
+
+  // Subscription para eventos de integração
+  useEffect(() => {
+    if (!codigoInventario) return
+
+    const subscription = supabaseClient
+      .channel('integration-events-stats')
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'invtrack_integrator_events' 
+        }, 
+        (payload) => {
+          if (payload.new.event_type === 'new_integration') {
+            // Só recarrega se realmente houve novas integrações
+            carregarEstatisticas()
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [codigoInventario])
 
   return {

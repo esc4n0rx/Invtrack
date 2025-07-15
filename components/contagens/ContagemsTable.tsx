@@ -11,14 +11,16 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Contagem } from "@/types/contagem"
+import { DeleteContagemRequest } from "@/types/contagem"
 
 interface ContagemsTableProps {
   contagens: Contagem[]
   loading: boolean
   onEdit: (contagem: Contagem) => void
+  onRemove?: (dados: DeleteContagemRequest) => void
 }
 
-export function ContagemsTable({ contagens, loading, onEdit }: ContagemsTableProps) {
+export function ContagemsTable({ contagens, loading, onEdit, onRemove }: ContagemsTableProps) {
   const [filtroTexto, setFiltroTexto] = React.useState('')
   const [filtroTipo, setFiltroTipo] = React.useState<string>('todos')
   const [filtroAtivo, setFiltroAtivo] = React.useState<string>('todos')
@@ -249,6 +251,16 @@ export function ContagemsTable({ contagens, loading, onEdit }: ContagemsTablePro
                    >
                      <Edit className="h-4 w-4" />
                    </Button>
+                   {onRemove && (
+                     <Button
+                       variant="ghost"
+                       size="sm"
+                       onClick={() => onRemove({ id: contagem.id, usuario_exclusao: '', motivo_exclusao: '' })}
+                       className="text-red-400 hover:text-red-200 hover:bg-red-700 ml-1"
+                     >
+                       Remover
+                     </Button>
+                   )}
                  </TableCell>
                </motion.tr>
              ))}

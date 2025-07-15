@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { IntegratorConfig, IntegratorLog } from '@/types/integrator'
+import { supabaseClient } from '@/lib/supabase'
 import { toast } from 'sonner'
 
 export function useIntegrator() {
@@ -19,19 +20,50 @@ export function useIntegrator() {
   // Buscar status inicial
   useEffect(() => {
     fetchStatus()
+    fetchLogs()
   }, [])
 
-  // Polling para atualizações em tempo real
+  // Subscription para mudanças no banco em tempo real
   useEffect(() => {
-    if (!config.isActive) return
+    const subscription = supabaseClient
+      .channel('integrator-config')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'invtrack_integrator_config' 
+        }, 
+        () => {
+          fetchStatus()
+        }
+      )
+      .subscribe()
 
-    const interval = setInterval(() => {
-      fetchStatus()
-      fetchLogs()
-    }, 5000) // Atualiza a cada 5 segundos
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
 
-    return () => clearInterval(interval)
-  }, [config.isActive])
+  // Subscription para logs em tempo real
+  useEffect(() => {
+    const subscription = supabaseClient
+      .channel('integrator-logs')
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'invtrack_integrator_logs' 
+        }, 
+        () => {
+          fetchLogs()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
 
   const fetchStatus = async () => {
     try {
