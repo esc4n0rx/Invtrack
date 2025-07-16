@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Inventario } from '@/types/inventario'
 import { buscarInventarioAtivo, criarInventario, finalizarInventario } from '@/lib/api/inventarios'
+import { FinalizacaoRequest, FinalizacaoResponse } from '@/types/inventory-finalization'
 
 export function useInventario() {
   const [inventarioAtivo, setInventarioAtivo] = useState<Inventario | null>(null)
@@ -23,6 +24,37 @@ export function useInventario() {
       setError('Erro de conexão')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const finalizarInventarioCompleto = async (
+    codigo_inventario: string,
+    usuario_finalizacao: string,
+    finalizar_inventario: boolean
+  ): Promise<FinalizacaoResponse> => {
+    try {
+      const dados: FinalizacaoRequest = {
+        codigo_inventario,
+        usuario_finalizacao,
+        finalizar_inventario
+      }
+  
+      const response = await fetch('/api/inventarios/finalizar-completo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dados),
+      })
+  
+      const result = await response.json()
+      return result
+    } catch (error) {
+      console.error('Erro ao finalizar inventário completo:', error)
+      return {
+        success: false,
+        error: 'Erro de conexão ao finalizar inventário'
+      }
     }
   }
 

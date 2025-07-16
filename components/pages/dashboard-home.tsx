@@ -24,6 +24,7 @@ import { useIntegrator } from "@/hooks/useIntegrator"
 import { useInventario } from "@/hooks/useInventario"
 import { useDashboardStats } from "@/hooks/useDashboardStats"
 import { LojasPendentesModal } from "@/components/dashboard/LojasPendentesModal"
+import { FinalizationModal } from "@/components/inventory/FinalizationModal"
 import { lojas as lojasPorResponsavelOriginal } from "@/data/loja";
 const lojasPorResponsavel: Record<string, string[]> = lojasPorResponsavelOriginal;
 
@@ -34,6 +35,7 @@ export function DashboardHome() {
   const [isLojasPendentesOpen, setIsLojasPendentesOpen] = React.useState(false)
   const [nomeResponsavel, setNomeResponsavel] = React.useState("")
   const [isCreating, setIsCreating] = React.useState(false)
+  const [isFinalizationModalOpen, setIsFinalizationModalOpen] = React.useState(false)
   const { config: integratorConfig } = useIntegrator()
   const { inventarioAtivo, loading, error, criarNovoInventario, finalizarInventarioAtivo } = useInventario()
   const { stats, loading: loadingStats, error: errorStats, recarregar } = useDashboardStats(inventarioAtivo?.codigo)
@@ -64,24 +66,52 @@ export function DashboardHome() {
       setIsCreating(false)
     }
   }
+  
 
-  const handleFinalizarInventario = async () => {
-    if (!inventarioAtivo) return
+  const handleFinalizarInventario = async (finalizarInventario: boolean) => {
+    if (!inventarioAtivo) {
+      return { success: false, error: 'Nenhum inventário ativo' }
+    }
 
-    const confirmacao = confirm(
-      `Tem certeza que deseja finalizar o inventário ${inventarioAtivo.codigo}? Esta ação não pode ser desfeita.`
-    )
+    try {
+      const response = await fetch('/api/inventarios/finalizar-completo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          codigo_inventario: inventarioAtivo.codigo,
+          usuario_finalizacao: inventarioAtivo.responsavel, // Usar responsável do inventário
+          finalizar_inventario: finalizarInventario
+        }),
+      })
 
-    if (!confirmacao) return
-
-    const result = await finalizarInventarioAtivo()
-    
-    if (result.success) {
-      toast.success("Inventário finalizado com sucesso!")
-    } else {
-      toast.error(result.error || "Erro ao finalizar inventário")
+      const result = await response.json()
+      
+      if (result.success) {
+        // Se foi finalizado, recarregar dados
+        if (finalizarInventario) {
+          setTimeout(() => {
+            window.location.reload()
+          }, 2000) // Dar tempo para o usuário ver o sucesso
+        }
+        
+        return { 
+          success: true, 
+          data: {
+            ...result.data,
+            arquivo_excel_url: result.data.arquivo_excel_url
+          }
+        }
+      } else {
+        return { success: false, error: result.error }
+      }
+    } catch (error) {
+      console.error('Erro na finalização:', error)
+      return { success: false, error: 'Erro de conexão' }
     }
   }
+  
 
   // Calcular totais de ativos
   const totalAtivos = React.useMemo(() => {
@@ -175,7 +205,7 @@ export function DashboardHome() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleFinalizarInventario}
+              onClick={() => setIsFinalizationModalOpen(true)}
               className="border-red-700 text-red-300 hover:bg-red-900/20"
             >
               Finalizar Inventário
@@ -436,6 +466,13 @@ export function DashboardHome() {
           </Alert>
         </motion.div>
       )}
+
+      <FinalizationModal
+        isOpen={isFinalizationModalOpen}
+        onClose={() => setIsFinalizationModalOpen(false)}
+        inventarioCodigo={inventarioAtivo?.codigo || ''}
+        onFinalize={handleFinalizarInventario}
+      />
 
       {/* Modal de lojas pendentes */}
       <LojasPendentesModal

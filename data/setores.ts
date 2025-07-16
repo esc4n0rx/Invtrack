@@ -22,7 +22,7 @@ export const setoresCD = [
     "FLV-CAM1",
     "FLV-CAM2",
     "FLV-CAM4",
-    "Central de Producao Estoque",
+    "Central de Producao",
     "Producao CAM 5",
     "Producao CAM 7"
   ];

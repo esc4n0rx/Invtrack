@@ -35,7 +35,7 @@ import { SuppliersPage } from "@/components/pages/suppliers-page"
 import { ReportsPage } from "@/components/pages/reports-page"
 import { ComparativesPage } from "@/components/pages/comparatives-page"
 import { ConfigurationsPage } from "@/components/pages/configurations-page"
-import { SystemAdjustmentsPage } from "@/components/pages/system-adjustments-page"
+import { FinalizacoesPage } from "@/components/pages/finalizacoes-page"
 import { IntegratorPage } from "@/components/pages/integrator-page"
 import { AboutPage } from "@/components/pages/about-page"
 
@@ -48,7 +48,7 @@ const menuItems = [
   { id: "reports", title: "Relatórios", icon: FileText, component: ReportsPage },
   { id: "comparatives", title: "Comparativos", icon: BarChart3, component: ComparativesPage },
   { id: "configurations", title: "Configurações", icon: Settings, component: ConfigurationsPage },
-  { id: "system-adjustments", title: "Ajustes", icon: Wrench, component: SystemAdjustmentsPage },
+  { id: "Inventarios Finalizados", title: "Ajustes", icon: Wrench, component: FinalizacoesPage},
   { id: "integrator", title: "Integrador", icon: Zap, component: IntegratorPage },
   { id: "about", title: "Sobre", icon: Info, component: AboutPage },
 ]
