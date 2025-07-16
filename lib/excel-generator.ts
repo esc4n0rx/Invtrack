@@ -6,8 +6,8 @@ export async function gerarExcelInventario(dados: DadosFinalizacao): Promise<Buf
   const workbook = new ExcelJS.Workbook()
   
   // Configurar metadados do workbook
-  workbook.creator = 'Sistema InvTrack'
-  workbook.lastModifiedBy = 'Sistema InvTrack'
+  workbook.creator = 'Sistema HBInventory'
+  workbook.lastModifiedBy = 'HBInventory'
   workbook.created = new Date()
   workbook.modified = new Date()
 
@@ -61,7 +61,7 @@ async function criarAbaResumo(workbook: ExcelJS.Workbook, dados: DadosFinalizaca
     ['Responsável:', dados.inventario.responsavel],
     ['Data de Criação:', new Date(dados.inventario.data_criacao).toLocaleDateString('pt-BR')],
     ['Data de Finalização:', new Date(dados.inventario.data_finalizacao).toLocaleDateString('pt-BR')],
-    ['Sistema Gerador:', 'InvTrack - Sistema de Gestão de Inventário']
+    ['Sistema Gerador:', 'HB Inventory - Sistema de Gestão de Inventário']
   ]
 
   infoInventario.forEach((item) => {
