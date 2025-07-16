@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import { IntegratorConfig, IntegratorLog, WebhookToken, WebhookStats } from '@/types/integrator'
+import { ProcessingResult } from '@/types/integrator-monitor'
 import { supabaseClient } from '@/lib/supabase'
 import { toast } from 'sonner'
 
@@ -24,6 +25,19 @@ export function useIntegrator() {
     totalContagensCreated: 0
   })
   const [loading, setLoading] = useState(false)
+
+  // Inicializar scheduler quando componente montar
+  useEffect(() => {
+    const initScheduler = async () => {
+      try {
+        await fetch('/api/integrator/init', { method: 'POST' })
+      } catch (error) {
+        console.error('Erro ao inicializar scheduler:', error)
+      }
+    }
+    
+    initScheduler()
+  }, [])
 
   // Buscar dados iniciais
   useEffect(() => {
@@ -47,7 +61,7 @@ export function useIntegrator() {
       )
       .subscribe()
 
-    return () => { subscription.unsubscribe(); }
+    return () => { subscription.unsubscribe() }
   }, [])
 
   // Subscription para novos logs
@@ -66,15 +80,15 @@ export function useIntegrator() {
           
           // Toast automático para sucessos
           if (newLog.type === 'success' && newLog.processed_count && newLog.processed_count > 0) {
-            toast.success('Novas contagens recebidas!', {
-              description: `${newLog.processed_count} contagens processadas via webhook`
+            toast.success('Novas contagens capturadas!', {
+              description: `${newLog.processed_count} contagens processadas pelo integrator`
             })
           }
         }
       )
       .subscribe()
 
-    return () => { subscription.unsubscribe(); }
+    return () => { subscription.unsubscribe() }
   }, [])
 
   // Subscription para contagens (atualizar dashboard)
@@ -87,23 +101,34 @@ export function useIntegrator() {
           schema: 'public', 
           table: 'invtrack_contagens' 
         }, 
-        () => {
-          // Disparar evento customizado para atualizar dashboard
-          window.dispatchEvent(new CustomEvent('contagens-updated'))
+        (payload) => {
+          const newContagem = payload.new
+          
+          // Verificar se foi criada pelo integrator
+          if (newContagem.obs === 'Capturado pelo integrator') {
+            // Disparar evento customizado para atualizar dashboard
+            window.dispatchEvent(new CustomEvent('contagens-updated'))
+          }
         }
       )
       .subscribe()
 
-    return () => { subscription.unsubscribe(); }
+    return () => { subscription.unsubscribe() }
   }, [])
 
   const fetchConfig = async () => {
     try {
-      const response = await fetch('/api/integrator/status')
+      const response = await fetch('/api/integrator/monitor')
       const data = await response.json()
       
       if (data.success) {
-        setConfig(data.config)
+        setConfig({
+          isActive: data.config.isActive,
+          interval: data.config.intervalSeconds,
+          lastSync: data.config.lastCheck ? new Date(data.config.lastCheck) : null,
+          totalProcessed: data.config.totalProcessed,
+          errorCount: data.config.errorCount
+        })
       }
     } catch (error) {
       console.error('Erro ao buscar config:', error)
@@ -153,29 +178,86 @@ export function useIntegrator() {
     setLoading(true)
     try {
       const action = config.isActive ? 'stop' : 'start'
-      const response = await fetch('/api/integrator/status', {
+      const response = await fetch('/api/integrator/monitor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action, intervalSeconds: config.interval })
       })
       
       const data = await response.json()
       
       if (data.success) {
-        setConfig(data.config)
         toast.success(
-          config.isActive ? 'Integrador desativado!' : 'Integrador ativado!',
+          config.isActive ? 'Monitor desativado!' : 'Monitor ativado!',
           {
             description: config.isActive 
-              ? 'API webhook bloqueada para receber contagens'
-              : 'API webhook liberada para receber contagens'
+              ? 'Parou de monitorar novas contagens'
+              : `Iniciou monitoramento automático a cada ${config.interval}s`
           }
         )
       } else {
-        toast.error(data.error || 'Erro ao alterar status do integrador')
+        toast.error(data.error || 'Erro ao alterar status do monitor')
       }
     } catch (error) {
-      toast.error('Erro ao alterar status do integrador')
+      toast.error('Erro ao alterar status do monitor')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const updateInterval = async (newInterval: number) => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/integrator/monitor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_interval', intervalSeconds: newInterval })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success(`Intervalo alterado para ${newInterval}s`)
+      } else {
+        toast.error(data.error || 'Erro ao alterar intervalo')
+      }
+    } catch (error) {
+      toast.error('Erro ao alterar intervalo')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const executeManualCheck = async (): Promise<ProcessingResult | null> => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/integrator/monitor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'check' })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        await fetchConfig()
+        await fetchLogs()
+        
+        const result = data.result as ProcessingResult
+        if (result.totalProcessed > 0) {
+          toast.success(`Verificação concluída: ${result.totalProcessed} contagens processadas`)
+        } else {
+          toast.info('Verificação concluída: nenhuma contagem nova encontrada')
+        }
+        
+        return result
+      } else {
+        toast.error(data.error || 'Erro na verificação manual')
+        return null
+      }
+    } catch (error) {
+      toast.error('Erro na verificação manual')
+      return null
     } finally {
       setLoading(false)
     }
@@ -232,6 +314,8 @@ export function useIntegrator() {
     webhookStats,
     loading,
     toggleIntegrator,
+    updateInterval,
+    executeManualCheck,
     generateNewToken,
     revokeToken,
     fetchLogs,

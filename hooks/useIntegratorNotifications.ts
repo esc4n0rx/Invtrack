@@ -1,59 +1,112 @@
-// hooks/useIntegratorNotifications.ts (atualizado)
+// hooks/useIntegratorNotifications.ts
 "use client"
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { IntegratorNotification, notificationService } from '@/lib/integrator-notifications'
+import { supabaseClient } from '@/lib/supabase'
+
+export interface IntegratorNotification {
+  type: 'new_records' | 'sync_complete' | 'sync_error' | 'config_change'
+  title: string
+  message: string
+  count?: number
+  timestamp: Date
+  details?: any
+}
 
 export function useIntegratorNotifications() {
   const [notifications, setNotifications] = useState<IntegratorNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
-    // Configurar listeners em tempo real
-    notificationService.setupRealtimeListeners()
-
-    // Subscription para novas notificações
-    const unsubscribe = notificationService.subscribe((notification) => {
-      setNotifications(prev => [notification, ...prev.slice(0, 49)]) // Manter últimas 50
-      setUnreadCount(prev => prev + 1)
-
-      // Mostrar toast baseado no tipo
-      switch (notification.type) {
-        case 'new_records':
-          toast.info(notification.title, {
-            description: notification.message,
-            duration: 5000
-          })
-          break
-        case 'sync_complete':
-          if (notification.details?.failed === 0) {
+    // Subscription para logs de sucesso do integrator
+    const subscription = supabaseClient
+      .channel('integrator-notifications')
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'invtrack_integrator_logs' 
+        }, 
+        (payload) => {
+          const log = payload.new
+          
+          if (log.type === 'success' && log.processed_count > 0) {
+            const notification: IntegratorNotification = {
+              type: 'new_records',
+              title: 'Novas Contagens Capturadas',
+              message: `${log.processed_count} contagens processadas pelo integrator`,
+              count: log.processed_count,
+              timestamp: new Date(log.created_at),
+              details: log.details
+            }
+            
+            setNotifications(prev => [notification, ...prev.slice(0, 49)])
+            setUnreadCount(prev => prev + 1)
+            
+            // Toast para notificação
             toast.success(notification.title, {
               description: notification.message,
-              duration: 4000
-            })
-          } else {
-            toast(notification.title, {
-              description: notification.message,
-              duration: 6000
+              duration: 5000
             })
           }
-          break
-        case 'sync_error':
-          toast.error(notification.title, {
-            description: notification.message,
-            duration: 8000
-          })
-          break
-        default:
-          toast(notification.title, {
-            description: notification.message,
-            duration: 4000
-          })
-      }
-    })
+          
+          if (log.type === 'error') {
+            const notification: IntegratorNotification = {
+              type: 'sync_error',
+              title: 'Erro no Integrator',
+              message: log.message,
+              timestamp: new Date(log.created_at),
+              details: log.details
+            }
+            
+            setNotifications(prev => [notification, ...prev.slice(0, 49)])
+            setUnreadCount(prev => prev + 1)
+            
+            // Toast para erro
+            toast.error(notification.title, {
+              description: notification.message,
+              duration: 8000
+            })
+          }
+        }
+      )
+      .subscribe()
 
-    return unsubscribe
+    return () => { subscription.unsubscribe() }
+  }, [])
+
+  // Subscription para mudanças na configuração
+  useEffect(() => {
+    const subscription = supabaseClient
+      .channel('integrator-config-changes')
+      .on('postgres_changes', 
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'invtrack_integrator_config' 
+        }, 
+        (payload) => {
+          const oldConfig = payload.old
+          const newConfig = payload.new
+          
+          if (oldConfig.is_active !== newConfig.is_active) {
+            const notification: IntegratorNotification = {
+              type: 'config_change',
+              title: 'Status do Integrator Alterado',
+              message: `Monitor ${newConfig.is_active ? 'ativado' : 'desativado'}`,
+              timestamp: new Date(newConfig.updated_at),
+              details: { oldActive: oldConfig.is_active, newActive: newConfig.is_active }
+            }
+            
+            setNotifications(prev => [notification, ...prev.slice(0, 49)])
+            setUnreadCount(prev => prev + 1)
+          }
+        }
+      )
+      .subscribe()
+
+    return () => { subscription.unsubscribe() }
   }, [])
 
   const markAsRead = () => {

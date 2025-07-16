@@ -1,4 +1,4 @@
-// lib/integrator-notifications.ts (corrigido)
+// lib/integrator-notifications.ts
 import { supabaseClient } from '@/lib/supabase'
 
 export interface IntegratorNotification {
@@ -37,14 +37,15 @@ export class IntegratorNotificationService {
     this.subscribers.forEach(callback => callback(notification))
   }
 
-  // Notificações específicas para diferentes eventos (apenas notifica subscribers)
-  notifyNewRecords(count: number, tableName: string) {
+  // Notificações específicas para diferentes eventos
+  notifyNewRecords(count: number, details?: any) {
     const notification: IntegratorNotification = {
       type: 'new_records',
-      title: 'Novas Contagens Detectadas',
-      message: `${count} nova(s) contagem(ns) encontrada(s) em ${tableName}`,
+      title: 'Novas Contagens Capturadas',
+      message: `${count} contagens processadas pelo integrator`,
       count,
-      timestamp: new Date()
+      timestamp: new Date(),
+      details
     }
     
     this.notify(notification)
@@ -53,8 +54,8 @@ export class IntegratorNotificationService {
   notifySyncComplete(processed: number, failed: number, duration: number) {
     const notification: IntegratorNotification = {
       type: 'sync_complete',
-      title: 'Sincronização Concluída',
-      message: `${processed} processados, ${failed} falhas em ${duration}ms`,
+      title: 'Verificação Concluída',
+      message: `${processed} processadas, ${failed} falhas em ${duration}ms`,
       count: processed,
       timestamp: new Date(),
       details: { processed, failed, duration }
@@ -63,12 +64,25 @@ export class IntegratorNotificationService {
     this.notify(notification)
   }
 
-  notifySyncError(error: string) {
+  notifySyncError(error: string, details?: any) {
     const notification: IntegratorNotification = {
       type: 'sync_error',
-      title: 'Erro na Sincronização',
+      title: 'Erro no Integrator',
       message: error,
-      timestamp: new Date()
+      timestamp: new Date(),
+      details
+    }
+    
+    this.notify(notification)
+  }
+
+  notifyConfigChange(isActive: boolean) {
+    const notification: IntegratorNotification = {
+      type: 'config_change',
+      title: 'Status do Integrator Alterado',
+      message: `Monitor ${isActive ? 'ativado' : 'desativado'}`,
+      timestamp: new Date(),
+      details: { isActive }
     }
     
     this.notify(notification)
@@ -77,25 +91,6 @@ export class IntegratorNotificationService {
   // Configurar listeners para eventos do banco (apenas no cliente)
   setupRealtimeListeners() {
     if (!this.isClient) return
-
-    // Listener para eventos de integração
-    supabaseClient
-      .channel('integrator-events')
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'invtrack_integrator_events' 
-        }, 
-        (payload) => {
-          const { event_type, processed_count, details } = payload.new
-          
-          if (event_type === 'new_integration' && processed_count > 0) {
-            this.notifyNewRecords(processed_count, details?.table_name || 'externa')
-          }
-        }
-      )
-      .subscribe()
 
     // Listener para logs de sucesso
     supabaseClient
@@ -108,14 +103,47 @@ export class IntegratorNotificationService {
           filter: 'type=eq.success'
         }, 
         (payload) => {
-          const { message, details, processed_count } = payload.new
+          const log = payload.new
           
-          if (message.includes('Sincronização concluída') && processed_count > 0) {
-            this.notifySyncComplete(
-              processed_count, 
-              details?.errors || 0,
-              details?.duration || 0
-            )
+          if (log.processed_count > 0) {
+            this.notifyNewRecords(log.processed_count, log.details)
+          }
+        }
+      )
+      .subscribe()
+
+    // Listener para erros
+    supabaseClient
+      .channel('integrator-error-logs')
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'invtrack_integrator_logs',
+          filter: 'type=eq.error'
+        }, 
+        (payload) => {
+          const log = payload.new
+          this.notifySyncError(log.message, log.details)
+        }
+      )
+      .subscribe()
+
+    // Listener para mudanças na configuração
+    supabaseClient
+      .channel('integrator-config-changes')
+      .on('postgres_changes', 
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'invtrack_integrator_config'
+        }, 
+        (payload) => {
+          const oldConfig = payload.old
+          const newConfig = payload.new
+          
+          if (oldConfig.is_active !== newConfig.is_active) {
+            this.notifyConfigChange(newConfig.is_active)
           }
         }
       )
