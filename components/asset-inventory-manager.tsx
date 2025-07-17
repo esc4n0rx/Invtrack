@@ -48,7 +48,7 @@ const menuItems = [
   { id: "reports", title: "Relatórios", icon: FileText, component: ReportsPage },
   { id: "comparatives", title: "Comparativos", icon: BarChart3, component: ComparativesPage },
   { id: "configurations", title: "Configurações", icon: Settings, component: ConfigurationsPage },
-  { id: "Inventarios Finalizados", title: "Ajustes", icon: Wrench, component: FinalizacoesPage},
+  { id: "Inventarios Finalizados", title: "Inventarios Finalizados", icon: Wrench, component: FinalizacoesPage},
   { id: "integrator", title: "Integrador", icon: Zap, component: IntegratorPage },
   { id: "about", title: "Sobre", icon: Info, component: AboutPage },
 ]
