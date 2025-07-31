@@ -1,4 +1,3 @@
-// app/contagem-externa/page.tsx
 "use client"
 
 import * as React from "react"
@@ -100,7 +99,6 @@ export default function ContagemExternaPage() {
         setSucesso(true)
         toast.success('Contagem registrada com sucesso!')
         
-        // Reset form após 3 segundos
         setTimeout(() => {
           setSetor('')
           setContador('')
@@ -120,17 +118,17 @@ export default function ContagemExternaPage() {
 
   if (sucesso) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           className="text-center"
         >
-          <CheckCircle className="h-16 w-16 text-green-400 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-100 mb-2">
+          <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-foreground mb-2">
             Contagem Registrada!
           </h1>
-          <p className="text-gray-400">
+          <p className="text-muted-foreground">
             Sua contagem foi registrada com sucesso e está aguardando análise.
           </p>
         </motion.div>
@@ -139,7 +137,7 @@ export default function ContagemExternaPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 p-4">
+    <div className="min-h-screen bg-background p-4">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Header */}
         <motion.div
@@ -147,11 +145,11 @@ export default function ContagemExternaPage() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center"
         >
-          <Package className="h-12 w-12 text-blue-400 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-100">
+          <Package className="h-12 w-12 text-primary mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-foreground">
             Contagem de Inventário
           </h1>
-          <p className="text-gray-400 mt-2">
+          <p className="text-muted-foreground mt-2">
             Registre a contagem dos ativos do setor selecionado
           </p>
         </motion.div>
@@ -162,19 +160,19 @@ export default function ContagemExternaPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
         >
-          <Card className="bg-gray-900 border-gray-700">
+          <Card>
             <CardHeader>
-              <CardTitle className="text-gray-100">Dados da Contagem</CardTitle>
+              <CardTitle>Dados da Contagem</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Setor */}
               <div className="space-y-2">
-                <Label className="text-gray-300">Setor do CD</Label>
+                <Label>Setor do CD</Label>
                 <Select value={setor} onValueChange={setSetor}>
-                  <SelectTrigger className="bg-gray-800 border-gray-600 text-gray-100">
+                  <SelectTrigger>
                     <SelectValue placeholder="Selecione um setor" />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-600 max-h-60">
+                  <SelectContent className="max-h-60">
                     {setoresCD.map((setorOption) => (
                       <SelectItem key={setorOption} value={setorOption}>
                         {setorOption}
@@ -186,27 +184,26 @@ export default function ContagemExternaPage() {
 
               {/* Contador */}
               <div className="space-y-2">
-                <Label className="text-gray-300">Seu Nome</Label>
+                <Label>Seu Nome</Label>
                 <Input
                   value={contador}
                   onChange={(e) => setContador(e.target.value)}
                   placeholder="Digite seu nome completo"
-                  className="bg-gray-800 border-gray-600 text-gray-100"
                 />
               </div>
 
               {/* Adicionar Ativos */}
               <div className="space-y-4">
-                <Label className="text-gray-300">Adicionar Ativos</Label>
+                <Label>Adicionar Ativos</Label>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-gray-300">Ativo</Label>
+                    <Label>Ativo</Label>
                     <Select value={ativoSelecionado} onValueChange={setAtivoSelecionado}>
-                      <SelectTrigger className="bg-gray-800 border-gray-600 text-gray-100">
+                      <SelectTrigger>
                         <SelectValue placeholder="Selecione um ativo" />
                       </SelectTrigger>
-                      <SelectContent className="bg-gray-800 border-gray-600">
+                      <SelectContent>
                         {ativos
                           .filter(ativo => !itens.some(item => item.ativo === ativo.nome))
                           .map((ativo) => (
@@ -220,21 +217,20 @@ export default function ContagemExternaPage() {
                     </div>
                   
                   <div className="space-y-2">
-                    <Label className="text-gray-300">Quantidade</Label>
+                    <Label>Quantidade</Label>
                     <Input
                       type="number"
                       min="0"
                       value={quantidade}
                       onChange={(e) => setQuantidade(e.target.value)}
                       placeholder="0"
-                      className="bg-gray-800 border-gray-600 text-gray-100"
                     />
                   </div>
                   
                   <div className="flex items-end">
                     <Button
                       onClick={adicionarItem}
-                      className="w-full bg-blue-600 hover:bg-blue-700"
+                      className="w-full"
                       disabled={!ativoSelecionado || !quantidade}
                     >
                       <Plus className="h-4 w-4 mr-2" />
@@ -246,18 +242,18 @@ export default function ContagemExternaPage() {
                 {/* Lista de itens */}
                 {itens.length > 0 && (
                   <div className="space-y-3">
-                    <Label className="text-gray-300">Ativos Adicionados:</Label>
+                    <Label>Ativos Adicionados:</Label>
                     <div className="space-y-2">
                       {itens.map((item, index) => (
                         <motion.div
                           key={index}
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
-                          className="flex items-center gap-3 p-3 bg-gray-800 rounded-lg border border-gray-700"
+                          className="flex items-center gap-3 p-3 bg-muted rounded-lg border"
                         >
-                          <Package className="h-4 w-4 text-blue-400 flex-shrink-0" />
+                          <Package className="h-4 w-4 text-primary flex-shrink-0" />
                           <div className="flex-1">
-                            <span className="text-gray-100 font-medium">{item.ativo}</span>
+                            <span className="text-foreground font-medium">{item.ativo}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Input
@@ -265,13 +261,13 @@ export default function ContagemExternaPage() {
                               min="0"
                               value={item.quantidade}
                               onChange={(e) => editarQuantidade(index, e.target.value)}
-                              className="w-20 bg-gray-700 border-gray-600 text-gray-100 text-center"
+                              className="w-20 text-center"
                             />
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => removerItem(index)}
-                              className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
                             >
                               <X className="h-4 w-4" />
                             </Button>
@@ -285,12 +281,11 @@ export default function ContagemExternaPage() {
 
               {/* Observações */}
               <div className="space-y-2">
-                <Label className="text-gray-300">Observações (opcional)</Label>
+                <Label>Observações (opcional)</Label>
                 <Textarea
                   value={obs}
                   onChange={(e) => setObs(e.target.value)}
                   placeholder="Observações sobre a contagem..."
-                  className="bg-gray-800 border-gray-600 text-gray-100"
                   rows={3}
                 />
               </div>
@@ -300,11 +295,11 @@ export default function ContagemExternaPage() {
                 <Button
                   onClick={handleSubmit}
                   disabled={loading || !setor || !contador.trim() || itens.length === 0}
-                  className="w-full bg-green-600 hover:bg-green-700 h-12 text-base"
+                  className="w-full bg-green-600 hover:bg-green-700 h-12 text-base text-white"
                 >
                   {loading ? (
                     <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-foreground mr-3"></div>
                       Registrando Contagem...
                     </>
                   ) : (
@@ -317,9 +312,9 @@ export default function ContagemExternaPage() {
               </div>
 
               {/* Aviso */}
-              <Alert className="bg-blue-900/20 border-blue-700">
-                <Package className="h-4 w-4" />
-                <AlertDescription className="text-blue-300">
+              <Alert>
+                <Package className="h-4 w-4 text-primary" />
+                <AlertDescription>
                   <strong>Importante:</strong> Verifique cuidadosamente as quantidades antes de enviar. 
                   Cada pessoa pode realizar apenas uma contagem por setor.
                 </AlertDescription>
