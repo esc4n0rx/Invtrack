@@ -15,6 +15,15 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    const tiposValidos = ['loja', 'cd', 'fornecedor', 'transito']
+    if (!tiposValidos.includes(dados.tipo)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Tipo de contagem inválido'
+      }, { status: 400 })
+    }
+
+
     // Buscar inventário ativo para vincular
     const { data: inventarioAtivo, error: errorInventario } = await supabaseServer
       .from('invtrack_inventarios')
@@ -85,20 +94,26 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const inventario = searchParams.get('inventario')
-
+    const tipo = searchParams.get('tipo')
+ 
     if (!inventario) {
       return NextResponse.json({
         success: false,
         error: 'Código do inventário é obrigatório'
       }, { status: 400 })
     }
-
-    const { data, error } = await supabaseServer
+ 
+    let query = supabaseServer
       .from('invtrack_contagens')
       .select('*')
       .eq('codigo_inventario', inventario)
-      .order('data_contagem', { ascending: false })
-
+ 
+    if (tipo) {
+      query = query.eq('tipo', tipo)
+    }
+ 
+    const { data, error } = await query.order('data_contagem', { ascending: false })
+ 
     if (error) {
       console.error('Erro ao buscar contagens:', error)
       return NextResponse.json({
@@ -106,12 +121,12 @@ export async function GET(request: NextRequest) {
         error: 'Erro ao buscar contagens'
       }, { status: 500 })
     }
-
+ 
     return NextResponse.json({
       success: true,
       data: data || []
     })
-
+ 
   } catch (error) {
     console.error('Erro interno:', error)
     return NextResponse.json({
@@ -119,4 +134,4 @@ export async function GET(request: NextRequest) {
       error: 'Erro interno do servidor'
     }, { status: 500 })
   }
-}
+ }
