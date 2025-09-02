@@ -1,82 +1,77 @@
 // lib/integrator-monitor.ts
 import { supabaseServer } from '@/lib/supabase'
-import { ContagemOriginal, ContagemTransitoOriginal, ProcessingResult } from '@/types/integrator-monitor'
+import { processRecordWithDeduplication, cleanupOldProcessedRecords } from '@/lib/integrator-deduplication'
+import type { IntegratorDeduplicationStats } from '@/types/contagem'
 
 export class IntegratorMonitor {
-  private static instance: IntegratorMonitor
-  private intervalId: NodeJS.Timeout | null = null
-  private running: boolean = false
-  private currentIntervalSeconds: number = 30
+  private isRunning = false
 
-  static getInstance(): IntegratorMonitor {
-    if (!IntegratorMonitor.instance) {
-      IntegratorMonitor.instance = new IntegratorMonitor()
+  async start(): Promise<void> {
+    if (this.isRunning) {
+      console.log('Integrator monitor já está executando')
+      return
     }
-    return IntegratorMonitor.instance
+
+    this.isRunning = true
+    console.log('Iniciando integrator monitor...')
+    
+    this.runLoop()
   }
 
-  async startMonitoring(intervalSeconds: number = 30) {
-    if (this.running) {
-      await this.stopMonitoring()
-    }
+  async stop(): Promise<void> {
+    this.isRunning = false
+    console.log('Parando integrator monitor...')
+  }
 
-    this.running = true
-    this.currentIntervalSeconds = intervalSeconds
-    
-    console.log(`Monitor iniciado com intervalo de ${intervalSeconds}s`)
-    
-    // Primeiro check imediato
-    await this.checkTables()
-    
-    // Configurar interval
-    this.intervalId = setInterval(async () => {
-      if (this.running) {
-        await this.checkTables()
+  private async runLoop(): Promise<void> {
+    while (this.isRunning) {
+      try {
+        const result = await this.processIntegration()
+        
+        if (result.totalProcessed > 0) {
+          await this.logSuccess(
+            `Integração concluída: ${result.totalProcessed} total (${result.newRecords} novos, ${result.duplicatesSkipped} duplicatas)`,
+            result
+          )
+        }
+
+        if (result.errors > 0) {
+          await this.logError('Erros durante integração', { 
+            errorCount: result.errors,
+            stats: result 
+          })
+        }
+
+      } catch (error) {
+        await this.logError('Erro crítico no integrator', { 
+          error: error instanceof Error ? error.message : 'Erro desconhecido'
+        })
       }
-    }, intervalSeconds * 1000)
 
-    await this.logInfo('Monitor iniciado automaticamente', { intervalSeconds })
-  }
-
-  async stopMonitoring() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId)
-      this.intervalId = null
-    }
-    this.running = false
-    console.log('Monitor parado')
-    await this.logInfo('Monitor parado')
-  }
-
-  isRunning(): boolean {
-    return this.running
-  }
-
-  getCurrentInterval(): number {
-    return this.currentIntervalSeconds
-  }
-
-  async checkTables(): Promise<ProcessingResult> {
-    const startTime = Date.now()
-    let totalProcessed = 0
-    let lojaProcessed = 0
-    let transitoProcessed = 0
-    const errors: string[] = []
-
-    try {
-      // Verificar se ainda deve estar ativo
+      // Aguardar intervalo configurado
       const { data: config } = await supabaseServer
         .from('invtrack_integrator_config')
-        .select('is_active')
+        .select('interval_seconds, is_active')
         .eq('id', 1)
         .single()
 
       if (!config?.is_active) {
-        console.log('Monitor foi desativado, parando...')
-        await this.stopMonitoring()
-        return { totalProcessed, lojaProcessed, transitoProcessed, errors, duration: Date.now() - startTime }
+        this.isRunning = false
+        break
       }
 
+      await this.sleep((config?.interval_seconds || 30) * 1000)
+    }
+  }
+
+  private async processIntegration(): Promise<IntegratorDeduplicationStats> {
+    const startTime = Date.now()
+    let totalProcessed = 0
+    let newRecords = 0
+    let duplicatesSkipped = 0
+    let errors = 0
+
+    try {
       // Buscar inventário ativo
       const { data: inventarioAtivo } = await supabaseServer
         .from('invtrack_inventarios')
@@ -85,26 +80,27 @@ export class IntegratorMonitor {
         .single()
 
       if (!inventarioAtivo) {
-        // Sem inventário ativo, não processar mas não é erro
-        return { totalProcessed, lojaProcessed, transitoProcessed, errors, duration: Date.now() - startTime }
+        return { totalProcessed, newRecords, duplicatesSkipped, errors, processingTime: Date.now() - startTime }
       }
 
-      // Processar tabela contagens (loja)
+      // Processar contagens de loja
       const resultLoja = await this.processContagensLoja(inventarioAtivo.codigo)
-      lojaProcessed = resultLoja.processed
-      totalProcessed += resultLoja.processed
-      errors.push(...resultLoja.errors)
+      totalProcessed += resultLoja.totalProcessed
+      newRecords += resultLoja.newRecords
+      duplicatesSkipped += resultLoja.duplicatesSkipped
+      errors += resultLoja.errors
 
-      // Processar tabela contagens_transito (trânsito)
+      // Processar contagens de trânsito
       const resultTransito = await this.processContagensTransito(inventarioAtivo.codigo)
-      transitoProcessed = resultTransito.processed
-      totalProcessed += resultTransito.processed
-      errors.push(...resultTransito.errors)
+      totalProcessed += resultTransito.totalProcessed
+      newRecords += resultTransito.newRecords
+      duplicatesSkipped += resultTransito.duplicatesSkipped
+      errors += resultTransito.errors
 
-      const duration = Date.now() - startTime
+      const processingTime = Date.now() - startTime
 
-      // Atualizar configuração apenas se processou algo ou teve erro
-      if (totalProcessed > 0 || errors.length > 0) {
+      // Atualizar configuração
+      if (totalProcessed > 0) {
         const { data: currentConfig } = await supabaseServer
           .from('invtrack_integrator_config')
           .select('total_processed, error_count')
@@ -115,53 +111,44 @@ export class IntegratorMonitor {
           .from('invtrack_integrator_config')
           .update({
             last_sync: new Date().toISOString(),
-            total_processed: (currentConfig?.total_processed || 0) + totalProcessed,
-            error_count: errors.length > 0 ? (currentConfig?.error_count || 0) + errors.length : currentConfig?.error_count
+            total_processed: (currentConfig?.total_processed || 0) + newRecords, // Apenas novos registros
+            error_count: errors > 0 ? (currentConfig?.error_count || 0) + errors : currentConfig?.error_count
           })
           .eq('id', 1)
       }
 
-      // Log de sucesso se processou alguma coisa
-      if (totalProcessed > 0) {
-        await this.logSuccess(
-          `Processadas ${totalProcessed} contagens (${lojaProcessed} loja, ${transitoProcessed} trânsito)`,
-          { totalProcessed, lojaProcessed, transitoProcessed, duration }
-        )
-      }
-
-      // Log de erro se houver
-      if (errors.length > 0) {
-        await this.logError('Erros durante o processamento', { errors, duration })
+      // Limpeza de registros antigos (executar uma vez por hora)
+      if (Math.random() < 0.02) { // ~2% de chance por execução
+        await cleanupOldProcessedRecords()
       }
 
       return {
         totalProcessed,
-        lojaProcessed,
-        transitoProcessed,
+        newRecords,
+        duplicatesSkipped,
         errors,
-        duration
+        processingTime
       }
 
     } catch (error) {
-      const duration = Date.now() - startTime
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido'
-      errors.push(errorMessage)
-
-      await this.logError('Erro no monitoramento', { error: errorMessage, duration })
-
+      await this.logError('Erro no processamento da integração', { error: errorMessage })
+      
       return {
         totalProcessed,
-        lojaProcessed,
-        transitoProcessed,
-        errors,
-        duration
+        newRecords,
+        duplicatesSkipped,
+        errors: errors + 1,
+        processingTime: Date.now() - startTime
       }
     }
   }
 
-  private async processContagensLoja(codigoInventario: string) {
-    let processed = 0
-    const errors: string[] = []
+  private async processContagensLoja(codigoInventario: string): Promise<IntegratorDeduplicationStats> {
+    let totalProcessed = 0
+    let newRecords = 0
+    let duplicatesSkipped = 0
+    let errors = 0
 
     try {
       // Buscar contagens não processadas
@@ -174,54 +161,56 @@ export class IntegratorMonitor {
       if (error) throw error
 
       if (!contagens || contagens.length === 0) {
-        return { processed, errors }
+        return { totalProcessed, newRecords, duplicatesSkipped, errors, processingTime: 0 }
       }
 
       // Processar cada contagem
       for (const contagem of contagens) {
         try {
-          // Inserir em invtrack_contagens
-          const { error: insertError } = await supabaseServer
-            .from('invtrack_contagens')
-            .insert({
-              tipo: 'loja',
-              ativo: contagem.ativo_nome,
-              loja: contagem.loja_nome,
-              quantidade: contagem.quantidade,
-              codigo_inventario: codigoInventario,
-              responsavel: contagem.email,
-              obs: 'Capturado pelo integrator'
-            })
+          totalProcessed++
 
-          if (insertError) {
-            // Se for erro de duplicata, marcar como processado mesmo assim
-            if (insertError.code === '23505') {
-              await this.markAsProcessed('contagens', contagem.id)
-              continue
-            }
-            throw insertError
+          const recordData = {
+            tipo: 'loja',
+            ativo: contagem.ativo_nome,
+            quantidade: contagem.quantidade,
+            loja: contagem.loja_nome,
+            responsavel: contagem.email,
+            codigo_inventario: codigoInventario,
+            obs: 'Capturado pelo integrator'
           }
 
-          // Marcar como processado
-          await this.markAsProcessed('contagens', contagem.id)
-          processed++
+          const result = await processRecordWithDeduplication(recordData, 'contagens', contagem.id)
+
+          if (result.success) {
+            newRecords++
+            await this.markAsProcessed('contagens', contagem.id)
+          } else if (result.isDuplicate) {
+            duplicatesSkipped++
+            await this.markAsProcessed('contagens', contagem.id) // Marcar como processado mesmo sendo duplicata
+          } else {
+            errors++
+            console.error(`Erro ao processar contagem ${contagem.id}:`, result.error)
+          }
 
         } catch (error) {
-          const errorMessage = `Erro ao processar contagem ${contagem.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
-          errors.push(errorMessage)
+          errors++
+          console.error(`Erro ao processar contagem ${contagem.id}:`, error)
         }
       }
 
     } catch (error) {
-      errors.push(`Erro ao buscar contagens: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+      errors++
+      console.error('Erro ao buscar contagens loja:', error)
     }
 
-    return { processed, errors }
+    return { totalProcessed, newRecords, duplicatesSkipped, errors, processingTime: 0 }
   }
 
-  private async processContagensTransito(codigoInventario: string) {
-    let processed = 0
-    const errors: string[] = []
+  private async processContagensTransito(codigoInventario: string): Promise<IntegratorDeduplicationStats> {
+    let totalProcessed = 0
+    let newRecords = 0
+    let duplicatesSkipped = 0
+    let errors = 0
 
     try {
       // Buscar contagens não processadas
@@ -234,53 +223,50 @@ export class IntegratorMonitor {
       if (error) throw error
 
       if (!contagens || contagens.length === 0) {
-        return { processed, errors }
+        return { totalProcessed, newRecords, duplicatesSkipped, errors, processingTime: 0 }
       }
 
       // Processar cada contagem
       for (const contagem of contagens) {
         try {
-          // Mapear CD origem
-          const cdOrigem = this.mapCDOrigem(contagem.loja_nome)
+          totalProcessed++
 
-          // Inserir em invtrack_contagens
-          const { error: insertError } = await supabaseServer
-            .from('invtrack_contagens')
-            .insert({
-              tipo: 'transito',
-              ativo: contagem.ativo_nome,
-              quantidade: contagem.quantidade,
-              codigo_inventario: codigoInventario,
-              responsavel: contagem.email,
-              cd_origem: cdOrigem,
-              cd_destino: 'CD RIO',
-              obs: 'Capturado pelo integrator'
-            })
-
-          if (insertError) {
-            // Se for erro de duplicata, marcar como processado mesmo assim
-            if (insertError.code === '23505') {
-              await this.markAsProcessed('contagens_transito', contagem.id)
-              continue
-            }
-            throw insertError
+          const recordData = {
+            tipo: 'transito',
+            ativo: contagem.ativo_nome,
+            quantidade: contagem.quantidade,
+            cd_origem: this.mapCDOrigem(contagem.loja_nome),
+            cd_destino: 'CD RIO',
+            responsavel: contagem.email,
+            codigo_inventario: codigoInventario,
+            obs: 'Capturado pelo integrator'
           }
 
-          // Marcar como processado
-          await this.markAsProcessed('contagens_transito', contagem.id)
-          processed++
+          const result = await processRecordWithDeduplication(recordData, 'contagens_transito', contagem.id)
+
+          if (result.success) {
+            newRecords++
+            await this.markAsProcessed('contagens_transito', contagem.id)
+          } else if (result.isDuplicate) {
+            duplicatesSkipped++
+            await this.markAsProcessed('contagens_transito', contagem.id) // Marcar como processado mesmo sendo duplicata
+          } else {
+            errors++
+            console.error(`Erro ao processar contagem trânsito ${contagem.id}:`, result.error)
+          }
 
         } catch (error) {
-          const errorMessage = `Erro ao processar contagem trânsito ${contagem.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
-          errors.push(errorMessage)
+          errors++
+          console.error(`Erro ao processar contagem trânsito ${contagem.id}:`, error)
         }
       }
 
     } catch (error) {
-      errors.push(`Erro ao buscar contagens trânsito: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+      errors++
+      console.error('Erro ao buscar contagens trânsito:', error)
     }
 
-    return { processed, errors }
+    return { totalProcessed, newRecords, duplicatesSkipped, errors, processingTime: 0 }
   }
 
   private mapCDOrigem(lojaNome: string): string {
@@ -308,7 +294,7 @@ export class IntegratorMonitor {
         type: 'success',
         message,
         details,
-        processed_count: details?.totalProcessed || 0
+        processed_count: details?.newRecords || 0
       })
   }
 
@@ -322,15 +308,9 @@ export class IntegratorMonitor {
       })
   }
 
-  private async logInfo(message: string, details?: any) {
-    await supabaseServer
-      .from('invtrack_integrator_logs')
-      .insert({
-        type: 'info',
-        message,
-        details
-      })
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
   }
 }
 
-export const integratorMonitor = IntegratorMonitor.getInstance()
+export const integratorMonitor = new IntegratorMonitor()

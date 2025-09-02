@@ -1,123 +1,67 @@
 // lib/integrator-webhook.ts
 import { supabaseServer } from '@/lib/supabase'
-import { ativos } from '@/data/ativos'
+import { processRecordWithDeduplication } from '@/lib/integrator-deduplication'
 
-export interface WebhookContagem {
-  email: string
-  loja_nome?: string
-  ativo_nome: string
-  quantidade: number
-  tipo?: 'loja' | 'cd' | 'fornecedor' | 'transito'
-  setor_cd?: string
-  cd_origem?: string
-  cd_destino?: string
-  fornecedor?: string
-  obs?: string
-}
-
-export interface ProcessWebhookResult {
+export interface WebhookProcessResult {
   processed: number
   duplicates: number
   errors: string[]
 }
 
-export async function processWebhookContagem(contagens: WebhookContagem[]): Promise<ProcessWebhookResult> {
-  const result: ProcessWebhookResult = {
+export async function processWebhookContagem(contagensData: any[]): Promise<WebhookProcessResult> {
+  const result: WebhookProcessResult = {
     processed: 0,
     duplicates: 0,
     errors: []
   }
 
   // Buscar inventário ativo
-  const { data: inventario } = await supabaseServer
+  const { data: inventarioAtivo, error: errorInventario } = await supabaseServer
     .from('invtrack_inventarios')
     .select('codigo')
     .eq('status', 'ativo')
     .single()
 
-  if (!inventario) {
+  if (errorInventario || !inventarioAtivo) {
     result.errors.push('Nenhum inventário ativo encontrado')
     return result
   }
 
-  // Processar cada contagem
-  for (let i = 0; i < contagens.length; i++) {
-    const contagem = contagens[i]
-    
+  for (let i = 0; i < contagensData.length; i++) {
+    const contagemData = contagensData[i]
+
     try {
-      // Validar dados obrigatórios
-      if (!contagem.email || !contagem.ativo_nome || contagem.quantidade === undefined) {
-        result.errors.push(`Contagem ${i + 1}: Dados obrigatórios ausentes (email, ativo_nome, quantidade)`)
+      // Validação básica
+      if (!contagemData.tipo || !contagemData.ativo || typeof contagemData.quantidade !== 'number' || !contagemData.responsavel) {
+        result.errors.push(`Contagem ${i + 1}: Dados obrigatórios não informados`)
         continue
       }
 
-      // Validar ativo
-      const ativoEncontrado = ativos.find(a => a.nome === contagem.ativo_nome)
-      if (!ativoEncontrado) {
-        result.errors.push(`Contagem ${i + 1}: Ativo não encontrado: ${contagem.ativo_nome}`)
-        continue
+      // Preparar dados da contagem
+      const dadosContagem = {
+        tipo: contagemData.tipo,
+        ativo: contagemData.ativo,
+        quantidade: contagemData.quantidade,
+        codigo_inventario: inventarioAtivo.codigo,
+        responsavel: contagemData.responsavel.trim(),
+        obs: contagemData.obs?.trim() || null,
+        loja: contagemData.loja?.trim() || null,
+        setor_cd: contagemData.setor_cd?.trim() || null,
+        cd_origem: contagemData.cd_origem?.trim() || null,
+        cd_destino: contagemData.cd_destino?.trim() || null,
+        fornecedor: contagemData.fornecedor?.trim() || null
       }
 
-      // Determinar tipo se não fornecido
-      let tipo = contagem.tipo
-      if (!tipo) {
-        if (contagem.cd_origem && contagem.cd_destino) {
-          tipo = 'transito'
-        } else if (contagem.setor_cd) {
-          tipo = 'cd'
-        } else if (contagem.fornecedor) {
-          tipo = 'fornecedor'
-        } else {
-          tipo = 'loja'
-        }
-      }
+      // Processar com deduplicação
+      const processResult = await processRecordWithDeduplication(dadosContagem, 'webhook')
 
-      // Preparar dados para inserção
-      const dadosContagem: any = {
-        tipo,
-        ativo: ativoEncontrado.nome,
-        quantidade: Math.max(0, Math.floor(contagem.quantidade)),
-        codigo_inventario: inventario.codigo,
-        responsavel: contagem.email,
-        obs: contagem.obs || null,
-        loja: contagem.loja_nome || null,
-        setor_cd: contagem.setor_cd || null,
-        cd_origem: contagem.cd_origem || null,
-        cd_destino: contagem.cd_destino || null,
-        fornecedor: contagem.fornecedor || null
-      }
-
-      // Verificar duplicata
-      const { data: existing } = await supabaseServer
-        .from('invtrack_contagens')
-        .select('id')
-        .eq('tipo', dadosContagem.tipo)
-        .eq('ativo', dadosContagem.ativo)
-        .eq('codigo_inventario', dadosContagem.codigo_inventario)
-        .eq('responsavel', dadosContagem.responsavel)
-        .eq('loja', dadosContagem.loja)
-        .eq('setor_cd', dadosContagem.setor_cd)
-        .eq('cd_origem', dadosContagem.cd_origem)
-        .eq('cd_destino', dadosContagem.cd_destino)
-        .eq('fornecedor', dadosContagem.fornecedor)
-        .single()
-
-      if (existing) {
+      if (processResult.success) {
+        result.processed++
+      } else if (processResult.isDuplicate) {
         result.duplicates++
-        continue
+      } else {
+        result.errors.push(`Contagem ${i + 1}: ${processResult.error || 'Erro desconhecido'}`)
       }
-
-      // Inserir contagem
-      const { error: insertError } = await supabaseServer
-        .from('invtrack_contagens')
-        .insert(dadosContagem)
-
-      if (insertError) {
-        result.errors.push(`Contagem ${i + 1}: ${insertError.message}`)
-        continue
-      }
-
-      result.processed++
 
     } catch (error) {
       result.errors.push(`Contagem ${i + 1}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
