@@ -3,7 +3,7 @@
 import * as React from "react"
 import { motion } from "framer-motion"
 import { useTheme } from "next-themes"
-import { Bell, Shield, Database, Palette, Trash2, AlertCircle } from "lucide-react"
+import { Bell, Shield, Database, Palette, Trash2, AlertCircle, RefreshCw } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
@@ -19,11 +19,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useInventario } from "@/hooks/useInventario"
+import { useIntegrator } from "@/hooks/useIntegrator" // Importar hook do integrator
 import { toast } from "sonner"
 
 export function ConfigurationsPage() {
   const { theme, setTheme } = useTheme()
   const { inventarioAtivo } = useInventario()
+  const { config: integratorConfig, toggleCleanupCron, loading: integratorLoading } = useIntegrator()
   const [isCleaning, setIsCleaning] = React.useState(false)
   
   const handleThemeChange = (checked: boolean) => {
@@ -126,41 +128,55 @@ export function ConfigurationsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-             <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-700">
-                <div>
-                  <h4 className="font-semibold text-foreground">Limpar Contagens Duplicadas</h4>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Remove registros de contagem duplicados do inventário ativo ({inventarioAtivo?.codigo || 'Nenhum'}). Use como último recurso.
-                  </p>
-                </div>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" disabled={!inventarioAtivo || isCleaning}>
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      {isCleaning ? "Limpando..." : "Executar Limpeza"}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent className="bg-gray-900 border-gray-700">
-                    <AlertDialogHeader>
-                      <AlertDialogTitle className="text-gray-100 flex items-center gap-2">
-                        <AlertCircle className="text-red-500"/>
-                        Confirmar Ação
-                      </AlertDialogTitle>
-                      <AlertDialogDescription className="text-gray-400">
-                        Esta ação removerá permanentemente todas as contagens duplicadas para o inventário 
-                        <strong className="text-red-400"> {inventarioAtivo?.codigo}</strong>. 
-                        A duplicidade é baseada em tipo, ativo, local e responsável. Esta ação não pode ser desfeita.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel className="border-gray-600">Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleLimparDuplicatas} className="bg-red-600 hover:bg-red-700">
-                        Sim, limpar duplicatas
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-             </div>
+            <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-700">
+              <div>
+                <h4 className="font-semibold text-foreground">Limpeza Automática de Duplicatas</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Ativa um job a cada 5 minutos para remover contagens duplicadas do inventário ativo.
+                </p>
+              </div>
+              <Switch
+                checked={integratorConfig.isCleanupCronActive}
+                onCheckedChange={toggleCleanupCron}
+                disabled={integratorLoading}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg border border-gray-700">
+              <div>
+                <h4 className="font-semibold text-foreground">Limpeza Manual de Duplicatas</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Força a remoção imediata de duplicatas do inventário ({inventarioAtivo?.codigo || 'Nenhum'}). Use como último recurso.
+                </p>
+              </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" disabled={!inventarioAtivo || isCleaning}>
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    {isCleaning ? "Limpando..." : "Executar Limpeza Manual"}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="bg-gray-900 border-gray-700">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-gray-100 flex items-center gap-2">
+                      <AlertCircle className="text-red-500"/>
+                      Confirmar Ação
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="text-gray-400">
+                      Esta ação removerá permanentemente todas as contagens duplicadas para o inventário 
+                      <strong className="text-red-400"> {inventarioAtivo?.codigo}</strong>. 
+                      Esta ação não pode ser desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="border-gray-600">Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleLimparDuplicatas} className="bg-red-600 hover:bg-red-700">
+                      Sim, limpar duplicatas
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </CardContent>
         </Card>
       </motion.div>

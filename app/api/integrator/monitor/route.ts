@@ -19,7 +19,8 @@ export async function GET() {
         intervalSeconds: config?.interval_seconds || 30,
         lastCheck: config?.last_sync || null,
         totalProcessed: config?.total_processed || 0,
-        errorCount: config?.error_count || 0
+        errorCount: config?.error_count || 0,
+        isCleanupCronActive: config?.is_cleanup_cron_active || false // Adicionado
       }
     })
   } catch (error) {

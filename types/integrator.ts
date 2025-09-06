@@ -1,10 +1,11 @@
 // types/integrator.ts
 export interface IntegratorConfig {
     isActive: boolean
-    interval: number // mantido para compatibilidade, mas não usado
+    interval: number
     lastSync: Date | null
     totalProcessed: number
     errorCount: number
+    isCleanupCronActive: boolean // Adicionado
   }
   
   export interface IntegratorLog {

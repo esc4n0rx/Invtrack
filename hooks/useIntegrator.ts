@@ -13,7 +13,8 @@ export function useIntegrator() {
     interval: 30,
     lastSync: null,
     totalProcessed: 0,
-    errorCount: 0
+    errorCount: 0,
+    isCleanupCronActive: false
   })
   const [logs, setLogs] = useState<IntegratorLog[]>([])
   const [webhookTokens, setWebhookTokens] = useState<WebhookToken[]>([])
@@ -116,7 +117,7 @@ export function useIntegrator() {
     return () => { subscription.unsubscribe() }
   }, [])
 
-  const fetchConfig = async () => {
+ const fetchConfig = async () => {
     try {
       const response = await fetch('/api/integrator/monitor')
       const data = await response.json()
@@ -127,13 +128,38 @@ export function useIntegrator() {
           interval: data.config.intervalSeconds,
           lastSync: data.config.lastCheck ? new Date(data.config.lastCheck) : null,
           totalProcessed: data.config.totalProcessed,
-          errorCount: data.config.errorCount
+          errorCount: data.config.errorCount,
+          isCleanupCronActive: data.config.isCleanupCronActive // Adicionado
         })
       }
     } catch (error) {
       console.error('Erro ao buscar config:', error)
     }
   }
+
+
+  const toggleCleanupCron = async (isActive: boolean) => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/inventarios/toggle-cleanup-cron', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive })
+      })
+      const result = await response.json()
+      if (result.success) {
+        toast.success(result.message)
+        await fetchConfig() // Atualiza o estado
+      } else {
+        toast.error(result.error || 'Erro ao alterar status da limpeza automática.')
+      }
+    } catch (error) {
+      toast.error('Erro de conexão ao tentar alterar a limpeza automática.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
 
   const fetchLogs = async () => {
     try {
@@ -319,6 +345,7 @@ export function useIntegrator() {
     generateNewToken,
     revokeToken,
     fetchLogs,
-    fetchWebhookStats
+    fetchWebhookStats,
+    toggleCleanupCron
   }
 }
