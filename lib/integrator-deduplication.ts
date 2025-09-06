@@ -24,39 +24,26 @@ export interface DeduplicationResult {
 
 /**
  * Gera uma chave única (hash) baseada nos campos principais de uma contagem
- * A chave combina: tipo + ativo + quantidade + localização + responsável + inventário
+ * A chave combina: inventário + tipo + ativo + localização + responsável
+ * A quantidade não é incluída para evitar que correções (mesmo item, quantidade diferente) sejam inseridas como duplicatas.
+ * Em vez disso, a lógica deve ser de UPSERT. Se o registro já existe, ele é atualizado.
  */
 export function generateRecordHash(record: IntegrationRecord): string {
-  // Normalizar campos para evitar diferenças por espaços ou case
-  const normalizeString = (str: string | null | undefined): string => {
-    if (!str) return ''
-    return str.toString().trim().toLowerCase().replace(/\s+/g, ' ')
-  }
+  const normalize = (str: string | null | undefined): string => (str || '').trim().toLowerCase()
 
-  const normalizeNumber = (num: number | null | undefined): string => {
-    if (num === null || num === undefined) return '0'
-    return num.toString()
-  }
-
-  // Campos-chave para gerar o hash
   const keyParts = [
-    normalizeString(record.codigo_inventario),
-    normalizeString(record.tipo),
-    normalizeString(record.ativo),
-    normalizeNumber(record.quantidade),
-    normalizeString(record.loja),
-    normalizeString(record.setor_cd),
-    normalizeString(record.cd_origem),
-    normalizeString(record.cd_destino),
-    normalizeString(record.fornecedor),
-    normalizeString(record.responsavel)
-  ]
-
-  // Gerar chave única combinando todos os campos
-  const combinedKey = keyParts.join('|')
+    normalize(record.codigo_inventario),
+    normalize(record.tipo),
+    normalize(record.ativo),
+    normalize(record.loja),
+    normalize(record.setor_cd),
+    normalize(record.cd_origem),
+    normalize(record.cd_destino),
+    normalize(record.fornecedor),
+    normalize(record.responsavel)
+  ].join('|')
   
-  // Gerar hash SHA-256
-  return createHash('sha256').update(combinedKey, 'utf8').digest('hex')
+  return createHash('sha256').update(keyParts, 'utf8').digest('hex')
 }
 
 /**
@@ -130,7 +117,7 @@ export async function markRecordAsProcessed(
 }
 
 /**
- * Verifica e processa um registro, evitando duplicatas
+ * Processa um registro, evitando duplicatas com uma lógica de UPSERT.
  */
 export async function processRecordWithDeduplication(
   record: IntegrationRecord,
@@ -145,9 +132,8 @@ export async function processRecordWithDeduplication(
 }> {
   const recordHash = generateRecordHash(record)
 
-  // Verificar duplicata
+  // 1. Verificar na tabela de tracking se já processamos este hash
   const duplicationCheck = await checkDuplicateRecord(recordHash)
-  
   if (duplicationCheck.isDuplicate) {
     return {
       success: false,
@@ -158,44 +144,35 @@ export async function processRecordWithDeduplication(
   }
 
   try {
-    // Tentar inserir o registro na tabela principal
-    const { error: insertError } = await supabaseServer
+    // 2. Tentar inserir ou atualizar (UPSERT) o registro na tabela principal
+    const { error: upsertError } = await supabaseServer
       .from('invtrack_contagens')
-      .insert({
-        tipo: record.tipo as any,
-        ativo: record.ativo,
-        quantidade: record.quantidade,
+      .upsert({
         codigo_inventario: record.codigo_inventario,
+        tipo: record.tipo,
+        ativo: record.ativo,
+        loja: record.loja,
+        setor_cd: record.setor_cd,
+        cd_origem: record.cd_origem,
+        cd_destino: record.cd_destino,
+        fornecedor: record.fornecedor,
         responsavel: record.responsavel,
-        obs: record.obs || null,
-        loja: record.loja || null,
-        setor_cd: record.setor_cd || null,
-        cd_origem: record.cd_origem || null,
-        cd_destino: record.cd_destino || null,
-        fornecedor: record.fornecedor || null
+        quantidade: record.quantidade,
+        obs: record.obs
+      }, {
+        onConflict: 'codigo_inventario, tipo, ativo, loja, setor_cd, cd_origem, cd_destino, fornecedor, responsavel',
       })
 
-    if (insertError) {
-      // Se for erro de constraint única, marcar como processado mesmo assim
-      if (insertError.code === '23505') {
-        await markRecordAsProcessed(recordHash, sourceTable, sourceId, record.codigo_inventario)
-        return {
-          success: false,
-          isDuplicate: true,
-          recordHash,
-          reason: 'Registro já existe na tabela principal (constraint única)'
-        }
-      }
-      
+    if (upsertError) {
       return {
         success: false,
         isDuplicate: false,
         recordHash,
-        error: insertError.message
+        error: upsertError.message
       }
     }
 
-    // Marcar como processado
+    // 3. Marcar como processado na tabela de tracking
     await markRecordAsProcessed(recordHash, sourceTable, sourceId, record.codigo_inventario, {
       inserted_at: new Date().toISOString(),
       record_data: record

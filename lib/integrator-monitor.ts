@@ -1,8 +1,7 @@
 // lib/integrator-monitor.ts
 import { supabaseServer } from '@/lib/supabase'
-import { ContagemOriginal, ContagemTransitoOriginal, ProcessingResult } from '@/types/integrator-monitor'
+import { ProcessingResult } from '@/types/integrator-monitor'
 import { processRecordWithDeduplication, cleanupOldProcessedRecords } from '@/lib/integrator-deduplication'
-import type { IntegratorDeduplicationStats } from '@/types/contagem'
 
 export class IntegratorMonitor {
   private static instance: IntegratorMonitor
