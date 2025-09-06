@@ -3,7 +3,7 @@
 
 import * as React from "react"
 import { motion } from "framer-motion"
-import { Warehouse, Users, Eye, AlertTriangle, CheckCircle } from "lucide-react"
+import { Warehouse, Users, Eye, AlertTriangle, CheckCircle, FileUp } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,33 +16,35 @@ interface ContagemExternaCardProps {
 
 export function ContagemExternaCard({ setorData, onClick }: ContagemExternaCardProps) {
   const temDivergencias = setorData.comparacao?.some(c => c.divergencias) || false
+  const algumaLancada = setorData.contagens.some(c => c.status === 'lançada')
   
   const getStatusColor = () => {
     if (setorData.totalContagens === 0) return "bg-gray-700 text-gray-300"
-    if (setorData.totalContagens === 1) return "bg-yellow-900 text-yellow-300 border-yellow-700"
-    if (temDivergencias) return "bg-red-900 text-red-300 border-red-700"
-    return "bg-green-900 text-green-300 border-green-700"
+    if (algumaLancada) return "bg-green-900 text-green-300 border-green-700"
+    if (setorData.totalContagens > 1 && temDivergencias) return "bg-red-900 text-red-300 border-red-700"
+    if (setorData.totalContagens >= 1) return "bg-yellow-900 text-yellow-300 border-yellow-700"
+    return "bg-gray-700 text-gray-300"
   }
 
   const getStatusText = () => {
+    if (algumaLancada) return "Lançada"
     if (setorData.totalContagens === 0) return "Sem contagens"
-    if (setorData.totalContagens === 1) return "1 contagem"
-    if (temDivergencias) return "Com divergências"
-    return "Contagens OK"
+    if (setorData.totalContagens > 1 && temDivergencias) return "Com divergências"
+    return "Pendente"
   }
 
   const getStatusIcon = () => {
+    if (algumaLancada) return <FileUp className="h-4 w-4" />
     if (setorData.totalContagens === 0) return <Warehouse className="h-4 w-4" />
-    if (setorData.totalContagens === 1) return <Users className="h-4 w-4" />
-    if (temDivergencias) return <AlertTriangle className="h-4 w-4" />
-    return <CheckCircle className="h-4 w-4" />
+    if (setorData.totalContagens > 1 && temDivergencias) return <AlertTriangle className="h-4 w-4" />
+    return <Users className="h-4 w-4" />
   }
 
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      whileHover={{ scale: 1.02 }}
+      whileHover={{ scale: 1.02, boxShadow: "0 8px 32px 0 rgba(0,0,0,0.25)" }}
       className="cursor-pointer"
     >
       <Card 
@@ -68,8 +70,13 @@ export function ContagemExternaCard({ setorData, onClick }: ContagemExternaCardP
             </div>
             <div>
               <p className="text-gray-400">Status:</p>
-              <p className={`font-semibold ${temDivergencias ? 'text-red-400' : 'text-green-400'}`}>
-                {setorData.totalContagens > 1 
+              <p className={`font-semibold ${
+                algumaLancada ? 'text-green-400' :
+                temDivergencias ? 'text-red-400' : 
+                setorData.totalContagens > 1 ? 'text-green-400' : 'text-yellow-400'
+              }`}>
+                {algumaLancada ? 'Lançada' : 
+                 setorData.totalContagens > 1 
                   ? (temDivergencias ? 'Divergente' : 'Consistente')
                   : 'Pendente'
                 }
@@ -85,7 +92,7 @@ export function ContagemExternaCard({ setorData, onClick }: ContagemExternaCardP
                   <Badge 
                     key={index}
                     variant="secondary" 
-                    className="bg-gray-700 text-gray-300 text-xs"
+                    className={`text-xs ${contagem.status === 'lançada' ? 'bg-green-800 text-green-200' : 'bg-gray-700 text-gray-300'}`}
                   >
                     {contagem.contador}
                   </Badge>

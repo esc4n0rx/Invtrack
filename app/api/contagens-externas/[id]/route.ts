@@ -34,6 +34,13 @@ export async function POST(
       }, { status: 404 })
     }
 
+    if (contagemExterna.status === 'lançada') {
+      return NextResponse.json({
+        success: false,
+        error: 'Esta contagem já foi lançada'
+      }, { status: 400 })
+    }
+
     // Criar contagens na tabela principal
     const contagensParaCriar = contagemExterna.itens.map((item: any) => ({
       tipo: 'cd',
@@ -41,7 +48,7 @@ export async function POST(
       quantidade: item.quantidade,
       codigo_inventario: contagemExterna.codigo_inventario,
       responsavel: responsavel.trim(),
-      obs: contagemExterna.obs || undefined,
+      obs: contagemExterna.obs || `Contagem externa #${contagemExterna.numero_contagem} por ${contagemExterna.contador}`,
       setor_cd: contagemExterna.setor_cd
     }))
 
@@ -54,12 +61,20 @@ export async function POST(
       console.error('Erro ao aprovar contagem:', errorInsert)
       return NextResponse.json({
         success: false,
-        error: 'Erro ao aprovar contagem'
+        error: 'Erro ao registrar contagens na tabela principal'
       }, { status: 500 })
     }
 
-    // Marcar contagem externa como aprovada (opcional - podemos adicionar campo status)
-    // Por agora, vamos manter as contagens externas para histórico
+    // Marcar contagem externa como aprovada
+    const { error: errorUpdate } = await supabaseServer
+      .from('invtrack_contagens_externas')
+      .update({ status: 'lançada' })
+      .eq('id', contagemExterna.id)
+    
+    if (errorUpdate) {
+        console.error('Erro ao atualizar status da contagem externa:', errorUpdate)
+        // Mesmo com erro aqui, a operação principal foi um sucesso. Apenas logamos.
+    }
 
     return NextResponse.json({
       success: true,

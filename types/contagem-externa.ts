@@ -6,6 +6,7 @@ export interface ContagemExterna {
     contador: string
     obs?: string
     numero_contagem: number // 1, 2, 3, 4, 5
+    status: 'pendente' | 'lançada'
     data_contagem: string
     itens: ItemContagemExterna[]
     created_at: string

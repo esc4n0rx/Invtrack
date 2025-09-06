@@ -3,7 +3,7 @@
 
 import * as React from "react"
 import { motion } from "framer-motion"
-import { X, Package, User, Calendar, AlertTriangle, CheckCircle, FileCheck } from "lucide-react"
+import { X, Package, User, Calendar, AlertTriangle, CheckCircle, FileCheck, FileUp } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SetorContagens, ContagemExterna } from "@/types/contagem-externa"
 import { ContagemsComparison } from "./ContagemsComparison"
 import { toast } from "sonner"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface ContagemExternaModalProps {
   open: boolean
@@ -34,7 +35,7 @@ export function ContagemExternaModal({
   const [loadingAprovacao, setLoadingAprovacao] = React.useState(false)
 
   const handleAprovar = async () => {
-    if (!contagemSelecionada) return
+    if (!contagemSelecionada || contagemSelecionada.status === 'lançada') return
     
     if (!responsavelAprovacao.trim()) {
       toast.error('Informe o nome do responsável pela aprovação')
@@ -68,8 +69,12 @@ export function ContagemExternaModal({
   React.useEffect(() => {
     if (!open) {
       resetModal()
+    } else if (setorData && setorData.contagens.length > 0) {
+      // Seleciona a primeira contagem pendente, ou a primeira se todas estiverem lançadas
+      const pendente = setorData.contagens.find(c => c.status === 'pendente')
+      setContagemSelecionada(pendente || setorData.contagens[0])
     }
-  }, [open])
+  }, [open, setorData])
 
   if (!setorData) return null
 
@@ -129,9 +134,17 @@ export function ContagemExternaModal({
                             <User className="h-4 w-4 text-blue-400" />
                             <span className="font-medium text-gray-100">{contagem.contador}</span>
                           </div>
-                          <Badge className="bg-gray-700 text-gray-300">
-                            #{contagem.numero_contagem}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            {contagem.status === 'lançada' && (
+                                <Badge className="bg-green-900 text-green-300 border-green-700">
+                                    <FileUp className="h-3 w-3 mr-1" />
+                                    Lançada
+                                </Badge>
+                            )}
+                            <Badge className="bg-gray-700 text-gray-300">
+                                #{contagem.numero_contagem}
+                            </Badge>
+                          </div>
                         </div>
                       </CardHeader>
                       
@@ -204,37 +217,48 @@ export function ContagemExternaModal({
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                          <Label className="text-gray-300">Nome do Responsável pela Aprovação</Label>
-                          <Input
-                            value={responsavelAprovacao}
-                            onChange={(e) => setResponsavelAprovacao(e.target.value)}
-                            placeholder="Digite seu nome"
-                            className="bg-gray-700 border-gray-600 text-gray-100"
-                          />
-                        </div>
-                        
-                        <Button
-                          onClick={handleAprovar}
-                          disabled={loadingAprovacao || !responsavelAprovacao.trim()}
-                          className="w-full bg-green-600 hover:bg-green-700"
-                        >
-                          {loadingAprovacao ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                              Aprovando...
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                              Aprovar e Registrar
-                            </>
-                          )}
-                        </Button>
-                        
-                        <p className="text-xs text-gray-400">
-                          Esta ação irá registrar a contagem na tabela principal e não pode ser desfeita.
-                        </p>
+                        {contagemSelecionada.status === 'lançada' ? (
+                          <Alert className="bg-green-900/20 border-green-700">
+                            <CheckCircle className="h-4 w-4 text-green-400" />
+                            <AlertDescription className="text-green-300">
+                              Esta contagem já foi lançada e registrada no sistema.
+                            </AlertDescription>
+                          </Alert>
+                        ) : (
+                          <>
+                            <div className="space-y-2">
+                              <Label className="text-gray-300">Nome do Responsável pela Aprovação</Label>
+                              <Input
+                                value={responsavelAprovacao}
+                                onChange={(e) => setResponsavelAprovacao(e.target.value)}
+                                placeholder="Digite seu nome"
+                                className="bg-gray-700 border-gray-600 text-gray-100"
+                              />
+                            </div>
+                            
+                            <Button
+                              onClick={handleAprovar}
+                              disabled={loadingAprovacao || !responsavelAprovacao.trim()}
+                              className="w-full bg-green-600 hover:bg-green-700"
+                            >
+                              {loadingAprovacao ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                  Aprovando...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Aprovar e Registrar
+                                </>
+                              )}
+                            </Button>
+                            
+                            <p className="text-xs text-gray-400">
+                              Esta ação irá registrar a contagem na tabela principal e não pode ser desfeita.
+                            </p>
+                          </>
+                        )}
                       </CardContent>
                     </Card>
                   </>
