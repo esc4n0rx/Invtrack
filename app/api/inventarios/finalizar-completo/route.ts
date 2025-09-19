@@ -4,9 +4,7 @@ import { supabaseServer } from '@/lib/supabase'
 import { processarDadosInventario } from '@/lib/inventory-finalizer'
 import { gerarExcelInventario } from '@/lib/excel-generator'
 import { FinalizacaoRequest, FinalizacaoResponse } from '@/types/inventory-finalization'
-import { writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { existsSync } from 'fs'
+import { randomUUID } from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,24 +38,14 @@ export async function POST(request: NextRequest) {
     // Processar dados do inventário
     const dadosFinalizacao = await processarDadosInventario(codigo_inventario)
 
-    // Gerar Excel
-    const excelBuffer = await gerarExcelInventario(dadosFinalizacao)
+    // Gerar Excel (garante que o processo ocorre sem erros)
+    await gerarExcelInventario(dadosFinalizacao)
 
-    // Criar diretório para arquivos se não existir
-    const uploadsDir = join(process.cwd(), 'public', 'uploads', 'inventarios')
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true })
-    }
-
-    // Salvar arquivo Excel no servidor
+    // Informações do arquivo
     const timestamp = new Date().toISOString().split('T')[0]
     const nomeArquivo = `inventario_${codigo_inventario}_${timestamp}.xlsx`
-    const caminhoArquivo = join(uploadsDir, nomeArquivo)
-    
-    await writeFile(caminhoArquivo, excelBuffer)
-
-    // URL para download do arquivo
-    const arquivoUrl = `/uploads/inventarios/${nomeArquivo}`
+    const finalizacaoId = randomUUID()
+    const arquivoUrl = `/api/inventarios/download/${finalizacaoId}`
 
     // Calcular totais para salvar no banco
     const totaisHB = dadosFinalizacao.inventario_hb.totais_gerais
@@ -69,6 +57,7 @@ export async function POST(request: NextRequest) {
     const { data: finalizacao, error: errorFinalizacao } = await supabaseServer
       .from('invtrack_finalizacoes_inventario')
       .insert({
+        id: finalizacaoId,
         codigo_inventario,
         usuario_finalizacao,
         arquivo_excel_url: arquivoUrl,

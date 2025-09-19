@@ -13,7 +13,7 @@ interface Finalizacao {
   codigo_inventario: string
   data_finalizacao: string
   usuario_finalizacao: string
-  arquivo_excel_url: string
+  arquivo_excel_url: string | null
   total_hb_geral: number
   total_hnt_geral: number
   invtrack_inventarios: {
@@ -47,12 +47,20 @@ export function FinalizacoesPage() {
   }, [])
 
   const handleDownload = (finalizacao: Finalizacao) => {
-    const filename = finalizacao.arquivo_excel_url.split('/').pop()
-    const downloadUrl = `/api/inventarios/download/${filename}`
-    
+    if (!finalizacao.arquivo_excel_url) {
+      return
+    }
+
+    const dataFinalizacao = finalizacao.data_finalizacao
+      ? new Date(finalizacao.data_finalizacao)
+      : new Date()
+    const dataValida = isNaN(dataFinalizacao.getTime()) ? new Date() : dataFinalizacao
+    const dataFormatada = dataValida.toISOString().split('T')[0]
+    const filename = `inventario_${finalizacao.codigo_inventario}_${dataFormatada}.xlsx`
+
     const link = document.createElement('a')
-    link.href = downloadUrl
-    link.download = filename || 'inventario.xlsx'
+    link.href = finalizacao.arquivo_excel_url
+    link.download = filename
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -140,8 +148,9 @@ export function FinalizacoesPage() {
                 <div className="flex justify-end">
                   <Button
                     onClick={() => handleDownload(finalizacao)}
+                    disabled={!finalizacao.arquivo_excel_url}
                     size="sm"
-                    className="bg-blue-600 hover:bg-blue-700"
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Download className="h-4 w-4 mr-2" />
                     Download Excel
