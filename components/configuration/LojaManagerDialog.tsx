@@ -1,6 +1,5 @@
 // components/configuration/LojaManagerDialog.tsx
 "use client"
-
 import * as React from "react"
 import { Loader2, Pencil, Plus, RefreshCw, Save, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -36,14 +35,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
 import { LojaRegional } from "@/types/loja"
-
 interface LojaManagerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
-
 const initialFormState = { nome: "", responsavel: "" }
-
 export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps) {
   const [lojas, setLojas] = React.useState<LojaRegional[]>([])
   const [isLoading, setIsLoading] = React.useState(false)
@@ -54,25 +50,20 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
   const [updatingId, setUpdatingId] = React.useState<string | null>(null)
   const [deletingId, setDeletingId] = React.useState<string | null>(null)
   const [isCreating, setIsCreating] = React.useState(false)
-
   const carregarLojas = React.useCallback(async () => {
     setIsLoading(true)
     setError(null)
-
     try {
       const response = await fetch("/api/lojas")
       const result = await response.json()
-
       if (!response.ok || !result.success) {
         throw new Error(result.error || "Não foi possível carregar as lojas")
       }
-
       const dados: LojaRegional[] = (result.data || []).map((loja: LojaRegional) => ({
         ...loja,
         nome: loja.nome.trim(),
         responsavel: loja.responsavel.trim(),
       }))
-
       setLojas(dados)
     } catch (err) {
       console.error(err)
@@ -82,7 +73,6 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
       setEditingId(null)
     }
   }, [])
-
   React.useEffect(() => {
     if (open) {
       carregarLojas()
@@ -93,23 +83,19 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
       setError(null)
     }
   }, [open, carregarLojas])
-
   const iniciarEdicao = (loja: LojaRegional) => {
     setEditingId(loja.id)
     setEditForm({ nome: loja.nome, responsavel: loja.responsavel })
   }
-
   const cancelarEdicao = () => {
     setEditingId(null)
     setEditForm(initialFormState)
   }
-
   const handleUpdate = async (id: string) => {
     if (!editForm.nome.trim() || !editForm.responsavel.trim()) {
       toast.error("Informe o nome da loja e o regional")
       return
     }
-
     setUpdatingId(id)
     try {
       const response = await fetch(`/api/lojas/${id}`, {
@@ -122,19 +108,15 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
           responsavel: editForm.responsavel.trim(),
         }),
       })
-
       const result = await response.json()
-
       if (!response.ok || !result.success) {
         throw new Error(result.error || "Não foi possível atualizar a loja")
       }
-
       const atualizada: LojaRegional = {
         ...result.data,
         nome: result.data.nome.trim(),
         responsavel: result.data.responsavel.trim(),
       }
-
       setLojas(prev => prev.map(loja => (loja.id === id ? atualizada : loja)))
       toast.success("Loja atualizada com sucesso")
       cancelarEdicao()
@@ -147,20 +129,16 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
       setUpdatingId(null)
     }
   }
-
   const handleDelete = async (id: string) => {
     setDeletingId(id)
     try {
       const response = await fetch(`/api/lojas/${id}`, {
         method: "DELETE",
       })
-
       const result = await response.json()
-
       if (!response.ok || !result.success) {
         throw new Error(result.error || "Não foi possível remover a loja")
       }
-
       setLojas(prev => prev.filter(loja => loja.id !== id))
       toast.success("Loja removida com sucesso")
     } catch (err) {
@@ -172,13 +150,11 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
       setDeletingId(null)
     }
   }
-
   const handleCreate = async () => {
     if (!newLoja.nome.trim() || !newLoja.responsavel.trim()) {
       toast.error("Informe o nome da loja e o regional")
       return
     }
-
     setIsCreating(true)
     try {
       const response = await fetch("/api/lojas", {
@@ -191,19 +167,15 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
           responsavel: newLoja.responsavel.trim(),
         }),
       })
-
       const result = await response.json()
-
       if (!response.ok || !result.success) {
         throw new Error(result.error || "Não foi possível cadastrar a loja")
       }
-
       const criada: LojaRegional = {
         ...result.data,
         nome: result.data.nome.trim(),
         responsavel: result.data.responsavel.trim(),
       }
-
       setLojas(prev => [...prev, criada])
       setNewLoja(initialFormState)
       toast.success("Loja adicionada com sucesso")
@@ -216,13 +188,11 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
       setIsCreating(false)
     }
   }
-
   const responsaveisCadastrados = React.useMemo(() => {
     return Array.from(new Set(lojas.map(loja => loja.responsavel))).sort((a, b) =>
       a.localeCompare(b, "pt-BR")
     )
   }, [lojas])
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-gray-900 border-gray-700 max-w-4xl max-h-[85vh] overflow-y-auto">
@@ -232,7 +202,6 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
             Atualize a relação de lojas por regional sem precisar editar arquivos manuais.
           </DialogDescription>
         </DialogHeader>
-
         <div className="space-y-6">
           <div className="rounded-lg border border-gray-700 bg-gray-950/50">
             <div className="flex items-center justify-between border-b border-gray-700 px-4 py-3">
@@ -253,7 +222,6 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
                 </Button>
               </div>
             </div>
-
             {error ? (
               <div className="px-4 py-6 text-center text-sm text-red-300">
                 {error}
@@ -289,7 +257,6 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
                           const emEdicao = editingId === loja.id
                           const estaAtualizando = updatingId === loja.id
                           const estaRemovendo = deletingId === loja.id
-
                           return (
                             <TableRow key={loja.id} className="border-gray-800">
                               <TableCell className="align-top">
@@ -394,7 +361,6 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
               </ScrollArea>
             )}
           </div>
-
           <div className="rounded-lg border border-gray-700 bg-gray-950/50 p-4">
             <h3 className="text-sm font-semibold text-gray-200">Adicionar nova loja</h3>
             <p className="text-xs text-gray-400 mb-4">
@@ -435,13 +401,11 @@ export function LojaManagerDialog({ open, onOpenChange }: LojaManagerDialogProps
             </div>
           </div>
         </div>
-
         <datalist id="responsaveis-cadastrados">
           {responsaveisCadastrados.map(responsavel => (
             <option key={responsavel} value={responsavel} />
           ))}
         </datalist>
-
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             Fechar
