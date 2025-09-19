@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
         codigo_inventario,
         usuario_finalizacao,
         arquivo_excel_url: arquivoUrl,
+        nome_arquivo: nomeArquivo, // Adicionar o nome do arquivo
         total_hb_618: totaisHB.total_618,
         total_hb_623: totaisHB.total_623,
         total_hb_geral: totaisHB.total_geral,
