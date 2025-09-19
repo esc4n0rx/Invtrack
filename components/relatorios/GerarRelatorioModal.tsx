@@ -16,9 +16,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { TipoRelatorio, FiltrosRelatorio, CreateRelatorioRequest } from "@/types/relatorio"
-import { lojas } from "@/data/loja"
 import { setoresCD } from "@/data/setores"
 import { ativos } from "@/data/ativos"
+import { useLojasRegionais } from "@/hooks/useLojasRegionais"
 
 interface GerarRelatorioModalProps {
   open: boolean
@@ -72,6 +72,7 @@ export function GerarRelatorioModal({ open, onOpenChange, onCriar, loading = fal
   const [observacoes, setObservacoes] = useState('')
   const [filtros, setFiltros] = useState<FiltrosRelatorio>({})
   const [error, setError] = useState<string | null>(null)
+  const { lojas: lojasRegionais, loading: carregandoLojas, error: erroLojas } = useLojasRegionais()
 
   const handleSubmit = async () => {
     if (!nome.trim()) {
@@ -259,24 +260,41 @@ export function GerarRelatorioModal({ open, onOpenChange, onCriar, loading = fal
                     <div className="space-y-2">
                       <Label className="text-gray-300">Lojas Específicas</Label>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto p-2 bg-gray-700 rounded">
-                        {Object.values(lojas).flat().map((loja) => (
-                          <label key={loja} className="flex items-center space-x-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={filtros.loja_especifica?.includes(loja) || false}
-                              onChange={(e) => {
-                                const current = filtros.loja_especifica || []
-                                if (e.target.checked) {
-                                  setFiltros({...filtros, loja_especifica: [...current, loja]})
-                                } else {
-                                  setFiltros({...filtros, loja_especifica: current.filter(l => l !== loja)})
-                                }
-                              }}
-                              className="rounded"
-                            />
-                            <span className="text-gray-300">{loja}</span>
-                          </label>
-                        ))}
+                        {carregandoLojas ? (
+                          <div className="col-span-full flex items-center justify-center text-sm text-gray-300">
+                            Carregando lojas...
+                          </div>
+                        ) : erroLojas ? (
+                          <div className="col-span-full text-sm text-red-300">
+                            {erroLojas}
+                          </div>
+                        ) : lojasRegionais.length === 0 ? (
+                          <div className="col-span-full text-sm text-gray-300">
+                            Nenhuma loja cadastrada.
+                          </div>
+                        ) : (
+                          lojasRegionais.map((loja) => (
+                            <label key={loja.id} className="flex items-center space-x-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={filtros.loja_especifica?.includes(loja.nome) || false}
+                                onChange={(e) => {
+                                  const current = filtros.loja_especifica || []
+                                  if (e.target.checked) {
+                                    setFiltros({ ...filtros, loja_especifica: [...current, loja.nome] })
+                                  } else {
+                                    setFiltros({ ...filtros, loja_especifica: current.filter(l => l !== loja.nome) })
+                                  }
+                                }}
+                                className="rounded"
+                              />
+                              <span className="text-gray-300">
+                                {loja.nome}
+                                <span className="ml-1 text-xs text-gray-400">({loja.responsavel})</span>
+                              </span>
+                            </label>
+                          ))
+                        )}
                       </div>
                     </div>
 
