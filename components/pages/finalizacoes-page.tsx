@@ -47,9 +47,9 @@ export function FinalizacoesPage() {
   }, [])
 
   const handleDownload = (finalizacao: Finalizacao) => {
-    if (!finalizacao.arquivo_excel_url) {
-      return
-    }
+    const downloadUrl = finalizacao.arquivo_excel_url && finalizacao.arquivo_excel_url.startsWith('/api/inventarios/download/')
+      ? finalizacao.arquivo_excel_url
+      : `/api/inventarios/download/${finalizacao.id}`
 
     const dataFinalizacao = finalizacao.data_finalizacao
       ? new Date(finalizacao.data_finalizacao)
@@ -59,7 +59,7 @@ export function FinalizacoesPage() {
     const filename = `inventario_${finalizacao.codigo_inventario}_${dataFormatada}.xlsx`
 
     const link = document.createElement('a')
-    link.href = finalizacao.arquivo_excel_url
+    link.href = downloadUrl
     link.download = filename
     document.body.appendChild(link)
     link.click()
@@ -148,7 +148,6 @@ export function FinalizacoesPage() {
                 <div className="flex justify-end">
                   <Button
                     onClick={() => handleDownload(finalizacao)}
-                    disabled={!finalizacao.arquivo_excel_url}
                     size="sm"
                     className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >

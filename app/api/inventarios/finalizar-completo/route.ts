@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
 import { processarDadosInventario } from '@/lib/inventory-finalizer'
-import { gerarExcelInventario } from '@/lib/excel-generator'
 import { FinalizacaoRequest, FinalizacaoResponse } from '@/types/inventory-finalization'
 import { randomUUID } from 'crypto'
 
@@ -37,9 +36,6 @@ export async function POST(request: NextRequest) {
 
     // Processar dados do inventário
     const dadosFinalizacao = await processarDadosInventario(codigo_inventario)
-
-    // Gerar Excel (garante que o processo ocorre sem erros)
-    await gerarExcelInventario(dadosFinalizacao)
 
     // Informações do arquivo
     const timestamp = new Date().toISOString().split('T')[0]

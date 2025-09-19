@@ -56,10 +56,18 @@ export function FinalizationModal({ isOpen, onClose, inventarioCodigo, onFinaliz
       const result = await onFinalize(finalizarInventario)
       
       if (result.success) {
+        const fallbackUrl = result.data?.finalizacao?.id
+          ? `/api/inventarios/download/${result.data.finalizacao.id}`
+          : null
+        const apiDownloadUrl = result.data?.arquivo_excel_url
+        const downloadUrl = apiDownloadUrl && apiDownloadUrl.startsWith('/api/inventarios/download/')
+          ? apiDownloadUrl
+          : fallbackUrl
+
         setCurrentStep('Finalização concluída com sucesso!')
         setProgress(100)
         setIsComplete(true)
-        setExcelUrl(result.data?.arquivo_excel_url || null)
+        setExcelUrl(downloadUrl)
         setExcelFileName(result.data?.nome_arquivo || null)
       } else {
         throw new Error(result.error || 'Erro desconhecido')
