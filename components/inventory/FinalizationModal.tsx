@@ -26,6 +26,7 @@ export function FinalizationModal({ isOpen, onClose, inventarioCodigo, onFinaliz
   const [error, setError] = React.useState('')
   const [finalizarInventario, setFinalizarInventario] = React.useState(false)
   const [excelUrl, setExcelUrl] = React.useState<string | null>(null)
+  const [excelFileName, setExcelFileName] = React.useState<string | null>(null)
 
   const handleFinalize = async () => {
     setIsProcessing(true)
@@ -55,10 +56,19 @@ export function FinalizationModal({ isOpen, onClose, inventarioCodigo, onFinaliz
       const result = await onFinalize(finalizarInventario)
       
       if (result.success) {
+        const fallbackUrl = result.data?.finalizacao?.id
+          ? `/api/inventarios/download/${result.data.finalizacao.id}`
+          : null
+        const apiDownloadUrl = result.data?.arquivo_excel_url
+        const downloadUrl = apiDownloadUrl && apiDownloadUrl.startsWith('/api/inventarios/download/')
+          ? apiDownloadUrl
+          : fallbackUrl
+
         setCurrentStep('Finalização concluída com sucesso!')
         setProgress(100)
         setIsComplete(true)
-        setExcelUrl(result.data?.arquivo_excel_url || null)
+        setExcelUrl(downloadUrl)
+        setExcelFileName(result.data?.nome_arquivo || null)
       } else {
         throw new Error(result.error || 'Erro desconhecido')
       }
@@ -74,12 +84,9 @@ export function FinalizationModal({ isOpen, onClose, inventarioCodigo, onFinaliz
 
   const handleDownload = () => {
     if (excelUrl) {
-      // Criar link para download através da API
-      const downloadUrl = `/api/inventarios/download/${excelUrl.split('/').pop()}`
-      
       const link = document.createElement('a')
-      link.href = downloadUrl
-      link.download = `Inventario_${inventarioCodigo}_${new Date().toISOString().split('T')[0]}.xlsx`
+      link.href = excelUrl
+      link.download = excelFileName || `Inventario_${inventarioCodigo}_${new Date().toISOString().split('T')[0]}.xlsx`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -93,6 +100,7 @@ export function FinalizationModal({ isOpen, onClose, inventarioCodigo, onFinaliz
       setProgress(0)
       setCurrentStep('')
       setExcelUrl(null)
+      setExcelFileName(null)
       onClose()
     }
   }
@@ -193,7 +201,7 @@ export function FinalizationModal({ isOpen, onClose, inventarioCodigo, onFinaliz
                 <div className="flex items-center gap-2 p-3 bg-gray-800 rounded-lg">
                   <FileSpreadsheet className="h-5 w-5 text-green-400" />
                   <span className="text-sm text-gray-300 flex-1">
-                    Arquivo Excel gerado
+                    {excelFileName || 'Arquivo Excel gerado'}
                   </span>
                   <Button
                     onClick={handleDownload}

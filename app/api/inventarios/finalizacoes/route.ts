@@ -55,9 +55,16 @@ export async function GET(request: NextRequest) {
       }, { status: 500 })
     }
 
+    const finalizacoesTratadas = (finalizacoes || []).map(finalizacao => ({
+      ...finalizacao,
+      arquivo_excel_url: finalizacao.arquivo_excel_url && finalizacao.arquivo_excel_url.startsWith('/api/inventarios/download/')
+        ? finalizacao.arquivo_excel_url
+        : `/api/inventarios/download/${finalizacao.id}`
+    }))
+
     return NextResponse.json({
       success: true,
-      data: finalizacoes || []
+      data: finalizacoesTratadas
     })
 
   } catch (error) {

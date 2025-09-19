@@ -220,6 +220,7 @@ export interface FinalizacaoInventario {
     data?: {
       finalizacao: FinalizacaoInventario
       arquivo_excel_url: string
+      nome_arquivo: string
     }
     error?: string
   }
