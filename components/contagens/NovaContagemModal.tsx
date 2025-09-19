@@ -14,11 +14,11 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { CreateContagemRequest } from "@/types/contagem"
 import { ativos } from "@/data/ativos"
-import { lojas } from "@/data/loja"
 import { setoresCD } from "@/data/setores"
 import { cds } from "@/data/cds"
 import { fornecedores } from "@/data/fornecedores"
 import { toast } from "sonner"
+import { useLojasRegionais } from "@/hooks/useLojasRegionais"
 
 interface NovaContagemModalProps {
   open: boolean
@@ -42,6 +42,7 @@ export function NovaContagemModal({ open, onOpenChange, onSubmit }: NovaContagem
   const [ativoSelecionado, setAtivoSelecionado] = React.useState('')
   const [quantidade, setQuantidade] = React.useState('')
   const [loading, setLoading] = React.useState(false)
+  const { lojas: lojasRegionais, loading: carregandoLojas, error: erroLojas } = useLojasRegionais()
 
   const resetForm = () => {
     setTipo('loja')
@@ -158,12 +159,14 @@ export function NovaContagemModal({ open, onOpenChange, onSubmit }: NovaContagem
     }
   }
 
-  const getOpcoesLocal = () => {
+  const opcoesLocal = React.useMemo(() => {
     switch (tipo) {
       case 'loja':
-        return Object.entries(lojas).flatMap(([responsavelLoja, lojasResponsavel]) =>
-          lojasResponsavel.map(loja => ({ value: loja, label: loja, responsavel: responsavelLoja }))
-        )
+        return lojasRegionais.map(loja => ({
+          value: loja.nome,
+          label: loja.nome,
+          responsavel: loja.responsavel
+        }))
       case 'cd':
         return setoresCD.map(setor => ({ value: setor, label: setor, responsavel: undefined }))
       case 'fornecedor':
@@ -171,7 +174,7 @@ export function NovaContagemModal({ open, onOpenChange, onSubmit }: NovaContagem
       default:
         return []
     }
-  }
+  }, [tipo, lojasRegionais])
 
   React.useEffect(() => {
     if (!open) {
@@ -215,23 +218,34 @@ export function NovaContagemModal({ open, onOpenChange, onSubmit }: NovaContagem
          {tipo === 'loja' && (
            <div className="space-y-2">
              <Label className="text-gray-300">Loja</Label>
-             <Select value={local} onValueChange={setLocal}>
-               <SelectTrigger className="bg-gray-800 border-gray-600 text-gray-100">
-                 <SelectValue placeholder="Selecione uma loja" />
+             <Select value={local} onValueChange={setLocal} disabled={carregandoLojas || !!erroLojas || opcoesLocal.length === 0}>
+               <SelectTrigger className="bg-gray-800 border-gray-600 text-gray-100" disabled={carregandoLojas || !!erroLojas || opcoesLocal.length === 0}>
+                 <SelectValue placeholder={carregandoLojas ? "Carregando lojas..." : erroLojas ? "Erro ao carregar" : "Selecione uma loja"} />
                </SelectTrigger>
                <SelectContent className="bg-gray-800 border-gray-600 max-h-60">
-                 {getOpcoesLocal().map((opcao) => (
-                   <SelectItem key={opcao.value} value={opcao.value}>
-                     <div className="flex flex-col">
-                       <span>{opcao.label}</span>
-                       {opcao.responsavel && (
-                         <span className="text-xs text-gray-400">Resp: {opcao.responsavel}</span>
-                       )}
-                     </div>
-                   </SelectItem>
-                 ))}
+                 {carregandoLojas ? (
+                   <div className="px-2 py-1 text-sm text-gray-300">Carregando lojas...</div>
+                 ) : erroLojas ? (
+                   <div className="px-2 py-1 text-sm text-red-300">{erroLojas}</div>
+                 ) : opcoesLocal.length === 0 ? (
+                   <div className="px-2 py-1 text-sm text-gray-300">Nenhuma loja cadastrada.</div>
+                 ) : (
+                   opcoesLocal.map((opcao) => (
+                     <SelectItem key={opcao.value} value={opcao.value}>
+                       <div className="flex flex-col">
+                         <span>{opcao.label}</span>
+                         {opcao.responsavel && (
+                           <span className="text-xs text-gray-400">Resp: {opcao.responsavel}</span>
+                         )}
+                       </div>
+                     </SelectItem>
+                   ))
+                 )}
                </SelectContent>
              </Select>
+             {erroLojas && (
+               <p className="text-xs text-red-300">Não foi possível carregar as lojas. Tente novamente mais tarde.</p>
+             )}
            </div>
          )}
 
@@ -243,7 +257,7 @@ export function NovaContagemModal({ open, onOpenChange, onSubmit }: NovaContagem
                  <SelectValue placeholder="Selecione um setor" />
                </SelectTrigger>
                <SelectContent className="bg-gray-800 border-gray-600 max-h-60">
-                 {getOpcoesLocal().map((opcao) => (
+                {opcoesLocal.map((opcao) => (
                    <SelectItem key={opcao.value} value={opcao.value}>
                      {opcao.label}
                    </SelectItem>
@@ -292,7 +306,7 @@ export function NovaContagemModal({ open, onOpenChange, onSubmit }: NovaContagem
                  <SelectValue placeholder="Selecione um fornecedor" />
                </SelectTrigger>
                <SelectContent className="bg-gray-800 border-gray-600">
-                 {getOpcoesLocal().map((opcao) => (
+                {opcoesLocal.map((opcao) => (
                    <SelectItem key={opcao.value} value={opcao.value}>
                      {opcao.label}
                    </SelectItem>

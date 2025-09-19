@@ -3,7 +3,7 @@
 import * as React from "react"
 import { motion } from "framer-motion"
 import { useTheme } from "next-themes"
-import { Bell, Shield, Database, Palette, Trash2, AlertCircle, RefreshCw } from "lucide-react"
+import { Bell, Shield, Database, Palette, Trash2, AlertCircle, RefreshCw, Store } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
@@ -21,12 +21,14 @@ import {
 import { useInventario } from "@/hooks/useInventario"
 import { useIntegrator } from "@/hooks/useIntegrator" // Importar hook do integrator
 import { toast } from "sonner"
+import { LojaManagerDialog } from "@/components/configuration/LojaManagerDialog"
 
 export function ConfigurationsPage() {
   const { theme, setTheme } = useTheme()
   const { inventarioAtivo } = useInventario()
   const { config: integratorConfig, toggleCleanupCron, loading: integratorLoading } = useIntegrator()
   const [isCleaning, setIsCleaning] = React.useState(false)
+  const [isLojaDialogOpen, setIsLojaDialogOpen] = React.useState(false)
   
   const handleThemeChange = (checked: boolean) => {
     setTheme(checked ? "dark" : "light")
@@ -123,6 +125,30 @@ export function ConfigurationsPage() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <Store className="h-5 w-5 text-emerald-500" />
+              Regionais & Lojas
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <h4 className="font-semibold text-foreground">Centralize a manutenção das lojas</h4>
+              <p className="text-sm text-muted-foreground">
+                Atualize regionais, renomeie ou remova lojas diretamente pela interface sem editar arquivos.
+              </p>
+            </div>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => setIsLojaDialogOpen(true)}
+            >
+              <Store className="mr-2 h-4 w-4" />
+              Gerenciar lojas
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <Database className="h-5 w-5 text-purple-500" />
               Manutenção
             </CardTitle>
@@ -180,6 +206,8 @@ export function ConfigurationsPage() {
           </CardContent>
         </Card>
       </motion.div>
+
+      <LojaManagerDialog open={isLojaDialogOpen} onOpenChange={setIsLojaDialogOpen} />
     </div>
   )
 }

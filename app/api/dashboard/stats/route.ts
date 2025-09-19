@@ -1,7 +1,6 @@
 // app/api/dashboard/stats/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase'
-import { lojas } from '@/data/loja'
 import { setoresCD } from '@/data/setores'
 import { ativos } from '@/data/ativos'
 import { DashboardStats, LojaContagem, AreaCDContagem, LojasPendentesPorResponsavel } from '@/types/dashboard'
@@ -34,17 +33,38 @@ export async function GET(request: NextRequest) {
 
     const todasContagens = contagens || []
 
+    // Buscar relação de lojas x responsáveis
+    const { data: lojasData, error: errorLojas } = await supabaseServer
+      .from('invtrack_lojas_regionais')
+      .select('id, nome_loja, responsavel')
+      .order('responsavel', { ascending: true })
+      .order('nome_loja', { ascending: true })
+
+    if (errorLojas) {
+      console.error('Erro ao buscar lojas cadastradas:', errorLojas)
+      return NextResponse.json({
+        success: false,
+        error: 'Erro ao buscar lojas cadastradas'
+      }, { status: 500 })
+    }
+
+    const lojasRegistradas = (lojasData ?? []).map(loja => ({
+      id: loja.id,
+      nome: loja.nome_loja?.trim() ?? '',
+      responsavel: loja.responsavel?.trim() ?? ''
+    })).filter(loja => loja.nome)
+
     // Processar estatísticas de lojas
-    const todasAsLojas = Object.values(lojas).flat()
     const lojasContadas = new Set(
       todasContagens
         .filter(c => c.tipo === 'loja' && c.loja)
-        .map(c => c.loja)
+        .map(c => (c.loja as string).trim())
     )
 
-    const lojasDetalhes: LojaContagem[] = todasAsLojas.map(loja => ({
-      loja,
-      contada: lojasContadas.has(loja)
+    const lojasDetalhes: LojaContagem[] = lojasRegistradas.map(loja => ({
+      loja: loja.nome,
+      contada: lojasContadas.has(loja.nome),
+      responsavel: loja.responsavel
     }))
 
     // Processar estatísticas de áreas CD
@@ -71,20 +91,35 @@ export async function GET(request: NextRequest) {
     })
 
     // Processar lojas pendentes por responsável
-    const lojasPendentesPorResponsavel: LojasPendentesPorResponsavel[] = Object.entries(lojas).map(([responsavel, lojasResponsavel]) => {
-      const lojasPendentes = lojasResponsavel.filter(loja => !lojasContadas.has(loja))
-      return {
+    const pendentesPorResponsavel = new Map<string, string[]>()
+
+    lojasDetalhes.forEach(loja => {
+      if (!loja.contada) {
+        const responsavel = loja.responsavel || 'Sem responsável'
+        const lista = pendentesPorResponsavel.get(responsavel) ?? []
+        lista.push(loja.loja)
+        pendentesPorResponsavel.set(responsavel, lista)
+      }
+    })
+
+    const lojasPendentesPorResponsavel: LojasPendentesPorResponsavel[] = Array.from(pendentesPorResponsavel.entries())
+      .map(([responsavel, lojasPendentes]) => ({
         responsavel,
         lojasPendentes,
         totalPendentes: lojasPendentes.length
-      }
-    }).filter(item => item.totalPendentes > 0)
+      }))
+      .filter(item => item.totalPendentes > 0)
+      .sort((a, b) => a.responsavel.localeCompare(b.responsavel, 'pt-BR'))
+
+    const totalLojas = lojasDetalhes.length
+    const totalLojasContadas = lojasDetalhes.filter(loja => loja.contada).length
+    const totalLojasPendentes = totalLojas - totalLojasContadas
 
     const stats: DashboardStats = {
       lojas: {
-        total: todasAsLojas.length,
-        contadas: lojasContadas.size,
-        pendentes: todasAsLojas.length - lojasContadas.size,
+        total: totalLojas,
+        contadas: totalLojasContadas,
+        pendentes: totalLojasPendentes,
         detalhes: lojasDetalhes
       },
       areasCD: {

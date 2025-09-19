@@ -25,9 +25,6 @@ import { useInventario } from "@/hooks/useInventario"
 import { useDashboardStats } from "@/hooks/useDashboardStats"
 import { LojasPendentesModal } from "@/components/dashboard/LojasPendentesModal"
 import { FinalizationModal } from "@/components/inventory/FinalizationModal"
-import { lojas as lojasPorResponsavelOriginal } from "@/data/loja";
-const lojasPorResponsavel: Record<string, string[]> = lojasPorResponsavelOriginal;
-
 import { toast } from "sonner"
 
 export function DashboardHome() {
@@ -130,48 +127,10 @@ export function DashboardHome() {
     return Math.round((stats.areasCD.contadas / stats.areasCD.total) * 100)
   }, [stats])
 
-  const getResponsavelPorLoja = (nomeLoja: string): string | undefined => {
-    for (const responsavel in lojasPorResponsavel) {
-      if (lojasPorResponsavel[responsavel].includes(nomeLoja)) {
-        return responsavel;
-      }
-    }
-    return undefined;
-  };
-
-  const lojasPendentesPorResponsavel = React.useMemo(() => {
-    if (!stats?.lojas.detalhes) return [];
-    // Filtra apenas lojas pendentes e garante que cada uma tenha o campo responsavel
-    const pendentes = stats.lojas.detalhes
-      .filter(loja => !loja.contada)
-      .map(loja => ({
-        ...loja,
-        responsavel: loja.responsavel || getResponsavelPorLoja(loja.loja)
-      }));
-    // Log para verificar pendentes
-    console.log('Pendentes:', pendentes);
-    // Agrupa por responsável
-    const agrupado: { [responsavel: string]: string[] } = {};
-    pendentes.forEach(loja => {
-      if (!loja.responsavel) {
-        console.warn('Loja sem responsável:', loja);
-        return; // Pula para a próxima loja
-      }
-      if (!agrupado[loja.responsavel]) agrupado[loja.responsavel] = [];
-      agrupado[loja.responsavel].push(loja.loja);
-    });
-    // Log para verificar agrupamento
-    console.log('Agrupado por responsável:', agrupado);
-    // Monta o array no formato esperado
-    const resultado = Object.entries(agrupado).map(([responsavel, lojasPendentes]) => ({
-      responsavel,
-      lojasPendentes,
-      totalPendentes: lojasPendentes.length,
-    }));
-    // Log do resultado final
-    console.log('Resultado final lojasPendentesPorResponsavel:', resultado);
-    return resultado;
-  }, [stats]);
+  const lojasPendentesPorResponsavel = React.useMemo(
+    () => stats?.lojasPendentes ?? [],
+    [stats?.lojasPendentes]
+  )
 
   return (
     <div className="p-6 space-y-6 bg-gray-950 min-h-full">
